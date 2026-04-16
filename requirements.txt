@@ -1,0 +1,14 @@
+torch>=1.13.0
+torchvision
+numpy
+pandas
+scikit-learn
+scipy
+matplotlib
+timm
+spikingjelly==0.0.0.0.14
+tqdm
+PyYAML
+requests
+Jinja2
+pillow
