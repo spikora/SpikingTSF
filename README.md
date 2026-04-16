@@ -6,17 +6,22 @@ A unified library for **spiking neural network (SNN) time series forecasting**, 
 
 ## Models
 
-| Model | Paper / Origin | Venue | Backend |
-|-------|---------------|-------|---------|
-| **SpikF** | [SpikF: Spiking Frequency-Domain Transformer](https://github.com/WWJ-creator/SpikF) | — | spikingjelly |
-| **iSpikformer** | Inverted Spike Transformer (SpikF repo) | — | spikingjelly |
-| **SpikeRNN** | Spike Recurrent Network (SpikF repo) | — | spikingjelly |
-| **SpikTCN** | Adapted from [SeqSNN](https://github.com/microsoft/SeqSNN) | ICML 2024 | spikingjelly |
-| **SpikGRU** | Adapted from [SeqSNN](https://github.com/microsoft/SeqSNN) | ICML 2024 | spikingjelly |
-| **TSLIF** | Inspired by [TS-LIF](https://github.com/kkking-kk/TS-LIF) | ICLR 2025 | spikingjelly |
-| **DLinear** | [Are Transformers Effective for TSF?](https://github.com/thuml/Time-Series-Library) | AAAI 2023 | ANN (baseline) |
+| Model | Paper / Origin | Venue | Backend | Tokens |
+|-------|---------------|-------|---------|--------|
+| **SpikF** | [SpikF: Spiking Frequency-Domain Transformer](https://github.com/WWJ-creator/SpikF) | — | clock_driven | patch |
+| **iSpikformer** | Inverted Spike Transformer (SpikF repo) | — | clock_driven | patch |
+| **SpikeRNN** | Spike Recurrent Network (SpikF repo) | — | clock_driven | patch |
+| **SpikTCN** | Adapted from [SeqSNN](https://github.com/microsoft/SeqSNN) | ICML 2024 | clock_driven | channel-ind. |
+| **SpikGRU** | Adapted from [SeqSNN](https://github.com/microsoft/SeqSNN) | ICML 2024 | clock_driven | channel-ind. |
+| **TSLIF** | Inspired by [TS-LIF](https://github.com/kkking-kk/TS-LIF) | ICLR 2025 | clock_driven | patch |
+| **Spikformer** | Adapted from [SeqSNN](https://github.com/microsoft/SeqSNN) | ICML 2024 | activation_based | time-step |
+| **Spikingformer** | Adapted from [SeqSNN](https://github.com/microsoft/SeqSNN) | ICML 2024 | activation_based | time-step |
+| **DLinear** | [Are Transformers Effective for TSF?](https://github.com/thuml/Time-Series-Library) | AAAI 2023 | ANN | — |
+| **ITransformer** | Adapted from [SeqSNN](https://github.com/microsoft/SeqSNN) / [iTransformer](https://github.com/thuml/iTransformer) | ICLR 2024 | ANN | variate |
 
-All SNN models use [SpikingJelly](https://github.com/fangwei123456/spikingjelly) (`clock_driven` API) consistently — no snntorch dependency.
+SNN models use [SpikingJelly](https://github.com/fangwei123456/spikingjelly). SpikF-family uses the `clock_driven` API; Spikformer/Spikingformer use the newer `activation_based` API. No snntorch dependency.
+
+All models use **per-sample instance normalisation** (TSLib unified evaluation protocol): subtract per-sample mean, divide by per-sample std, then reverse after prediction. This ensures fair comparison across models and datasets.
 
 ---
 
@@ -82,6 +87,28 @@ python run_long.py \
   --train_epochs 10 --batch_size 32 --lr 5e-4
 ```
 
+**Spikformer (SSA spike transformer):**
+```bash
+python run_long.py \
+  --model Spikformer \
+  --data ETTh1 --data_path ETTh1.csv \
+  --features M --seq_len 96 --pred_len 336 \
+  --T 4 --tau 2.0 --levels 2 \
+  --d_model 256 --n_heads 8 --d_ff 1024 \
+  --common_thr 1.0 --qk_scale 0.125 --encoder_type conv \
+  --train_epochs 10 --batch_size 32 --lr 5e-4
+```
+
+**ITransformer (inverted ANN transformer):**
+```bash
+python run_long.py \
+  --model ITransformer \
+  --data weather --data_path weather.csv \
+  --features M --seq_len 96 --pred_len 336 \
+  --levels 3 --d_model 512 --n_heads 8 --d_ff 2048 \
+  --train_epochs 10 --batch_size 32 --lr 1e-4
+```
+
 **Run pre-written scripts:**
 ```bash
 bash scripts/SpikF_ETTh1.sh
@@ -101,18 +128,29 @@ SpikingTSF/
 │   └── exp_ETT.py               # training / validation / test loop
 ├── models/
 │   ├── SpikF.py                 # SPE + SFS blocks; returns (T,B,H,D)
-│   ├── iSpikformer.py           # inverted spike transformer
-│   ├── SpikeRNN.py              # spike RNN
+│   ├── iSpikformer.py           # inverted spike transformer (SpikF repo)
+│   ├── SpikeRNN.py              # spike RNN (SpikF repo)
 │   ├── SpikTCN.py               # dilated causal TCN (adapted from SeqSNN)
 │   ├── SpikGRU.py               # spiking GRU (adapted from SeqSNN)
 │   ├── TSLIF.py                 # multi-scale fast/slow LIF (inspired by TS-LIF)
-│   └── DLinear.py               # decomposition linear baseline (from TSLib)
+│   ├── Spikformer.py            # SSA spike transformer — temporal tokens (SeqSNN)
+│   ├── Spikingformer.py         # Spikformer + ConvPE (SeqSNN)
+│   ├── DLinear.py               # decomposition linear baseline (TSLib)
+│   ├── ITransformer.py          # inverted ANN transformer baseline (SeqSNN/TSLib)
+│   └── layers/
+│       ├── spike_attention.py   # SSA, MLP, Block — shared by Spikformer models
+│       └── spike_encoder.py     # ConvEncoder, DeltaEncoder, RepeatEncoder
 ├── data_provider/
 │   └── ETT_data_loader.py       # Dataset_ETT_hour/minute, Dataset_Custom, Solar
 ├── utils/
 │   ├── metrics.py               # MAE, MSE, RSE, R²
 │   └── tools.py                 # EarlyStopping, StandardScaler
-├── scripts/                     # ready-to-run shell scripts per dataset
+├── scripts/
+│   ├── *.sh                     # SpikF scripts (existing)
+│   ├── Spikformer/              # Spikformer benchmark scripts
+│   ├── Spikingformer/           # Spikingformer benchmark scripts
+│   └── ITransformer/            # ITransformer benchmark scripts
+├── SeqSNN/                      # original SeqSNN repo (reference, not imported)
 └── datasets/long/               # place CSV files here
 ```
 
@@ -170,6 +208,12 @@ The experiment runner injects `enc_in` and `c_out` into `args` before model cons
 | `--patch_dim` | `32` | Patch embedding / TCN hidden dim |
 | `--alpha` | `2.0` | Alpha parameter (SpikF / iSpikformer) |
 | `--hidden_dim` | `720` | Dense hidden size |
+| `--d_model` | `256` | Attention / embedding dim (Spikformer / Spikingformer / ITransformer) |
+| `--n_heads` | `8` | Number of attention heads |
+| `--d_ff` | `1024` | Feedforward hidden dim (default 4 × d_model) |
+| `--common_thr` | `1.0` | LIF spike threshold (Spikformer / Spikingformer) |
+| `--qk_scale` | `0.125` | Attention score scale (Spikformer / Spikingformer) |
+| `--encoder_type` | `conv` | Spike encoder: `conv` \| `delta` \| `repeat` |
 | `--kernel_size` | `3` | Conv kernel size (SpikTCN) |
 | `--dropout` | `0.1` | Dropout rate |
 | `--moving_avg` | `25` | Trend kernel size (DLinear) |

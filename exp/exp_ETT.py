@@ -8,7 +8,7 @@ from torch import optim
 from torch.utils.data import DataLoader
 import warnings
 
-# --- SNN models (spikingjelly backend) ---
+# --- SNN models (spikingjelly clock_driven backend) ---
 from models.SpikF import SpikF
 from models.iSpikformer import iSpikformer
 from models.SpikeRNN import SpikeRNN
@@ -16,8 +16,13 @@ from models.SpikTCN import Model as SpikTCN
 from models.SpikGRU import Model as SpikGRU
 from models.TSLIF import Model as TSLIF
 
-# --- ANN baseline ---
+# --- SNN models (spikingjelly activation_based backend, adapted from SeqSNN) ---
+from models.Spikformer import Model as Spikformer
+from models.Spikingformer import Model as Spikingformer
+
+# --- ANN baselines ---
 from models.DLinear import Model as DLinear
+from models.ITransformer import Model as ITransformer
 
 from utils.metrics import metric, metric_
 from utils.tools import EarlyStopping
@@ -25,23 +30,40 @@ warnings.filterwarnings('ignore')
 from data_provider.ETT_data_loader import (
     Dataset_Custom, Dataset_ETT_hour, Dataset_ETT_minute, Solar
 )
+from data_provider.traffic_data_loader import Dataset_H5, Dataset_TXT
 from exp.exp_basic import Exp_Basic
-from spikingjelly.clock_driven import functional
+
+# Both reset APIs needed: clock_driven models are reset by cd_functional;
+# activation_based models (Spikformer, Spikingformer) also self-reset inside
+# forward(), but we call both here defensively so external callers are safe.
+from spikingjelly.clock_driven import functional as cd_functional
+try:
+    from spikingjelly.activation_based import functional as ab_functional
+    _HAS_AB = True
+except ImportError:
+    _HAS_AB = False
+
 torch.autograd.set_detect_anomaly(True)
 from torch.optim.lr_scheduler import CosineAnnealingLR
 
 
-# Models that use the new Model(configs) convention — enc_in injected before init
-_NEW_STYLE_MODELS = {'SpikTCN', 'SpikGRU', 'TSLIF', 'DLinear'}
+# Models that use the Model(configs) convention — enc_in injected before init
+_NEW_STYLE_MODELS = {
+    'SpikTCN', 'SpikGRU', 'TSLIF', 'DLinear',
+    'Spikformer', 'Spikingformer', 'ITransformer',
+}
 
 # Models that are pure ANN (no spikingjelly reset needed)
-_ANN_MODELS = {'DLinear'}
+_ANN_MODELS = {'DLinear', 'ITransformer'}
 
 _NEW_STYLE_CLASS = {
     'SpikTCN': SpikTCN,
     'SpikGRU': SpikGRU,
     'TSLIF': TSLIF,
     'DLinear': DLinear,
+    'Spikformer': Spikformer,
+    'Spikingformer': Spikingformer,
+    'ITransformer': ITransformer,
 }
 
 
@@ -58,6 +80,7 @@ class Exp_ETT(Exp_Basic):
             _dim_map = {
                 'ETTh1': 7, 'ETTh2': 7, 'ETTm1': 7, 'ETTm2': 7,
                 'ECL': 321, 'electricity': 321,
+                'elec-txt': 321,              # electricity.txt (SeqSNN / LSTNET format)
                 'exchange': 8,
                 'traffic': 862,
                 'weather': 21,
@@ -65,6 +88,8 @@ class Exp_ETT(Exp_Basic):
                 'metr-la': 207,
                 'pems-bay': 325,
                 'solar-energy': 137, 'solar_AL': 137,
+                'Solar': 137,
+                'solar-txt': 137,             # solar_AL.txt via Dataset_TXT
             }
             self.input_dim = _dim_map.get(self.args.data, 1)
         else:
@@ -109,19 +134,28 @@ class Exp_ETT(Exp_Basic):
     def _get_data(self, flag):
         args = self.args
 
+        # CSV/custom datasets — 70/10/20 split (TSLib default)
+        # H5 traffic datasets (PEMS-BAY, METR-LA) — 60/20/20 split (SeqSNN)
+        # TXT sensor datasets (solar, electricity-SeqSNN) — 60/20/20 split (SeqSNN)
         data_dict = {
-            'ETTh1': Dataset_ETT_hour,
-            'ETTh2': Dataset_ETT_hour,
-            'ETTm1': Dataset_ETT_minute,
-            'ETTm2': Dataset_ETT_minute,
-            'weather': Dataset_Custom,
-            'ECL': Dataset_Custom,
-            'electricity': Dataset_Custom,
-            'Solar': Solar,
-            'solar-energy': Solar,
-            'traffic': Dataset_Custom,
-            'exchange': Dataset_Custom,
-            'illness': Dataset_Custom,
+            'ETTh1':      Dataset_ETT_hour,
+            'ETTh2':      Dataset_ETT_hour,
+            'ETTm1':      Dataset_ETT_minute,
+            'ETTm2':      Dataset_ETT_minute,
+            'weather':    Dataset_Custom,
+            'ECL':        Dataset_Custom,
+            'electricity': Dataset_Custom,    # CSV version (ECL.csv)
+            'Solar':      Solar,
+            'solar-energy': Solar,            # txt version via fixed Solar class
+            'traffic':    Dataset_Custom,
+            'exchange':   Dataset_Custom,
+            'illness':    Dataset_Custom,
+            # H5 traffic datasets — adapted from SeqSNN
+            'metr-la':    Dataset_H5,
+            'pems-bay':   Dataset_H5,
+            # Plain-txt sensor datasets — adapted from SeqSNN
+            'solar-txt':  Dataset_TXT,        # solar_AL.txt direct
+            'elec-txt':   Dataset_TXT,        # electricity.txt (SeqSNN LSTNET format)
         }
         Data = data_dict[self.args.data]
 
@@ -130,6 +164,8 @@ class Exp_ETT(Exp_Basic):
         else:
             shuffle_flag, drop_last, batch_size = True, True, args.batch_size
 
+        # Dataset_H5 and Dataset_TXT don't use cols/target in the same way —
+        # pass them as kwargs but the classes will ignore unsupported ones safely.
         data_set = Data(
             root_path=args.root_path,
             data_path=args.data_path,
@@ -279,9 +315,14 @@ class Exp_ETT(Exp_Basic):
         batch_x = batch_x.float().to(self.args.rank)
         batch_y = batch_y.float()
 
-        # Reset SNN state (no-op for ANN models)
+        # Reset SNN state before each forward pass.
+        # cd_functional covers clock_driven neurons (SpikF, TSLIF, etc.)
+        # ab_functional covers activation_based neurons (Spikformer, Spikingformer)
+        # Each call is a no-op for neuron types it doesn't own.
         if self.args.model not in _ANN_MODELS:
-            functional.reset_net(self.model)
+            cd_functional.reset_net(self.model)
+            if _HAS_AB:
+                ab_functional.reset_net(self.model)
 
         outputs = self.model(batch_x)
 

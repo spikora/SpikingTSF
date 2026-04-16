@@ -7,14 +7,18 @@ parser = argparse.ArgumentParser(description='SpikingTSF — long-term forecasti
 # ── Model ──────────────────────────────────────────────────────────────────
 parser.add_argument('--model', type=str, default='SpikF',
                     choices=['SpikF', 'iSpikformer', 'SpikeRNN',
-                             'SpikTCN', 'SpikGRU', 'TSLIF', 'DLinear'],
+                             'SpikTCN', 'SpikGRU', 'TSLIF', 'DLinear',
+                             'Spikformer', 'Spikingformer', 'ITransformer'],
                     help='model name')
 
 # ── Dataset ────────────────────────────────────────────────────────────────
 parser.add_argument('--data', type=str, default='ETTh1',
                     choices=['ETTh1', 'ETTh2', 'ETTm1', 'ETTm2', 'ECL', 'traffic',
                              'weather', 'electricity', 'metr-la', 'pems-bay',
-                             'solar-energy', 'exchange'])
+                             'solar-energy', 'exchange',
+                             'solar-txt',   # solar_AL.txt via Dataset_TXT
+                             'elec-txt',    # electricity.txt via Dataset_TXT (SeqSNN format)
+                             ])
 parser.add_argument('--root_path', type=str, default='./datasets/long/')
 parser.add_argument('--data_path', type=str, default='ETTh1.csv')
 parser.add_argument('--features', type=str, default='M', choices=['S', 'M', 'MS'])
@@ -34,6 +38,21 @@ parser.add_argument('--patch_num', type=int, default=48, help='number of patches
 parser.add_argument('--patch_dim', type=int, default=32, help='patch/TCN hidden dim')
 parser.add_argument('--alpha', type=float, default=2.0, help='alpha (SpikF/iSpikformer)')
 parser.add_argument('--hidden_dim', type=int, default=720, help='dense hidden size')
+
+# ── Transformer hyperparameters (Spikformer / Spikingformer / ITransformer) ─
+parser.add_argument('--d_model', type=int, default=256,
+                    help='attention / embedding dimension')
+parser.add_argument('--n_heads', type=int, default=8,
+                    help='number of attention heads')
+parser.add_argument('--d_ff', type=int, default=1024,
+                    help='feedforward hidden dim (default 4 × d_model)')
+parser.add_argument('--common_thr', type=float, default=1.0,
+                    help='LIF spike threshold (Spikformer / Spikingformer)')
+parser.add_argument('--qk_scale', type=float, default=0.125,
+                    help='attention score scale (Spikformer / Spikingformer)')
+parser.add_argument('--encoder_type', type=str, default='conv',
+                    choices=['conv', 'delta', 'repeat'],
+                    help='spike encoder type (Spikformer / Spikingformer)')
 
 # ── ANN / general hyperparameters ─────────────────────────────────────────
 parser.add_argument('--kernel_size', type=int, default=3, help='Conv kernel size (SpikTCN)')
