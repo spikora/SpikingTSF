@@ -1,128 +1,216 @@
-"""
-Spiking GRU for long-term time series forecasting.
+"""SpikeGRU model implementation.
 
-Adapted from SeqSNN (Microsoft, MIT License):
-  Lv et al., "Efficient and Effective Time-Series Forecasting with Spiking Neural Networks", ICML 2024.
-  https://github.com/microsoft/SeqSNN  (SeqSNN/network/snn/spikegru.py)
+Reference:
+    Lv, Changze, Yansen Wang, Dongqi Han, Xiaoqing Zheng,
+    Xuanjing Huang, and Dongsheng Li.
+    "Efficient and Effective Time-Series Forecasting with Spiking Neural Networks."
+    arXiv preprint arXiv:2402.01533, 2024.
+    Paper: https://arxiv.org/abs/2402.01533
 
-Key differences from SeqSNN TSSNNGRU:
-  - No runner/registry dependency; returns (B, pred_len, D) directly
-  - Uses spikingjelly clock_driven API instead of snntorch (consistent with SpikF)
-  - Channel-independent: each of the D variates processed by its own GRU thread
-  - GRU gates use standard sigmoid/tanh; the hidden state is quantised by a spiking
-    LIF neuron after each GRU step (spike-on-output paradigm)
+Official project repository (SeqSNN):
+    https://github.com/microsoft/SeqSNN  (SeqSNN/network/snn/spikegru.py)
+
+Architecture follows SeqSNN's TSSNNGRU2D and the Spike-GRU described in the paper,
+adapted to spikingjelly activation_based API and our codebase conventions:
+  1. Spike encoder (conv or delta)            → (T, B, D, L)
+  2. Transpose                                → (T, B, L, D)
+  3. Optional positional encoding
+  4. Linear input projection + init LIF       → (T, B, L, hidden_dim)
+  5. Stack of SpikeGRUCell                    → (T, B, L, hidden_dim)
+     GRU gates (r, z, n) via ATan surrogate; hidden state spike-quantized by LIF
+  6. Decoder: dense1 → BN → LIF → dense2      → (T, B, pred_len, D)
+  7. Mean T                                   → (B, pred_len, D)
 """
 
 import torch
 from torch import nn
-from spikingjelly.clock_driven.neuron import MultiStepLIFNode
+from spikingjelly.activation_based import surrogate, neuron
+
+from models.layers.spike_encoder import ConvEncoder, DeltaEncoder
+from models.layers.positional_encoding import PositionEmbedding
+
+
+def _make_lif(tau: float) -> neuron.LIFNode:
+    return neuron.LIFNode(
+        tau=tau, step_mode='m', detach_reset=True,
+        surrogate_function=surrogate.ATan(),
+    )
 
 
 class SpikeGRUCell(nn.Module):
-    """
-    One-step GRU where the updated hidden state is quantised by a spiking LIF node.
+    """GRU spiking cell with input-to-hidden and hidden-to-hidden paths.
 
-    The GRU equations use standard differentiable gates (sigmoid/tanh).
-    The LIF applies spike coding to the output hidden state, providing sparse
-    temporal representation and gradient regularisation.
+    Processes T SNN steps sequentially, maintaining an explicit hidden state h
+    across steps so that the LIF membrane (via h) carries temporal information.
+    This faithfully mirrors SeqSNN's GRUCell: two linear paths (ih, hh) merged
+    via standard GRU gating, output spike-quantized by single-step LIF.
+
+    Args:
+        input_size:  Dimension of the input at each step.
+        hidden_size: Dimension of the hidden state / output.
+        tau:         LIF membrane time constant.
     """
 
-    def __init__(self, input_size: int, hidden_size: int, T: int, tau: float):
+    def __init__(self, input_size: int, hidden_size: int, tau: float):
         super().__init__()
         self.hidden_size = hidden_size
-        self.T = T
-
+        self._atan = surrogate.ATan()
         self.linear_ih = nn.Linear(input_size, 3 * hidden_size)
         self.linear_hh = nn.Linear(hidden_size, 3 * hidden_size)
-        # LIF on the new hidden state to produce spike-coded representation
-        self.lif = MultiStepLIFNode(tau=tau, detach_reset=True, backend='torch')
+        # Single-step LIF: state is h itself (explicitly maintained below)
+        self.lif = neuron.LIFNode(
+            tau=tau, step_mode='s', detach_reset=True,
+            surrogate_function=surrogate.ATan(),
+        )
 
-    def forward(self, x: torch.Tensor, h: torch.Tensor) -> torch.Tensor:
-        # x: (BD, input_size)   h: (BD, hidden_size)
-        y_ih = self.linear_ih(x).chunk(3, dim=-1)
-        y_hh = self.linear_hh(h).chunk(3, dim=-1)
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # x: (T, B, L, input_size)
+        T, B, L, _ = x.shape
+        BL = B * L
+        h = x.new_zeros(BL, self.hidden_size)                   # initial hidden state
 
-        r = torch.sigmoid(y_ih[0] + y_hh[0])          # reset gate
-        z = torch.sigmoid(y_ih[1] + y_hh[1])          # update gate
-        n = torch.tanh(y_ih[2] + r * y_hh[2])         # candidate hidden
-        h_new = (1.0 - z) * n + z * h                 # updated hidden
+        outputs = []
+        for t in range(T):
+            xf = x[t].reshape(BL, -1)                          # (BL, input_size)
 
-        # Spike quantisation over T time steps (static input repeated T times)
-        h_t = h_new.unsqueeze(0).repeat(self.T, 1, 1)  # (T, BD, hidden)
-        spk = self.lif(h_t)                             # (T, BD, hidden)
-        return spk.mean(0)                              # (BD, hidden)
+            y_ih = self.linear_ih(xf).chunk(3, dim=-1)         # 3 × (BL, hidden_size)
+            y_hh = self.linear_hh(h).chunk(3, dim=-1)
+
+            r = self._atan(y_ih[0] + y_hh[0])                  # reset gate  ∈ {0, 1}
+            z = self._atan(y_ih[1] + y_hh[1])                  # update gate ∈ {0, 1}
+            n = self._atan(y_ih[2] + r * y_hh[2])              # candidate
+
+            h_new = (1.0 - z) * n + z * h                      # gated update (BL, H)
+            h = self.lif(h_new.reshape(B, L, self.hidden_size)) # (B, L, H) — LIF spike
+            h = h.reshape(BL, self.hidden_size)
+            outputs.append(h.reshape(B, L, self.hidden_size))
+
+        return torch.stack(outputs, dim=0)                      # (T, B, L, hidden_size)
 
 
-class Model(nn.Module):
+class SpikeGRU(nn.Module):
+    """SpikeGRU: gated spiking RNN for long-term time-series forecasting.
+
+    Args:
+        input_len:      Sequence length (L = seq_len).
+        T:              Number of SNN time steps.
+        blocks:         Number of SpikeGRUCell layers.
+        D:              Number of input/output channels (enc_in).
+        pred_len:       Prediction horizon.
+        tau:            LIF membrane time constant.
+        hidden_dim:     Recurrent cell and decoder hidden size
+                        (mapped from ``alpha`` in args).
+        encoder_type:   Spike encoder — ``'conv'`` or ``'delta'``.
+        pe_type:        Positional encoding type — ``'none'``, ``'learn'``,
+                        ``'static'``, ``'conv'``, ``'neuron'``, ``'random'``.
+        pe_mode:        How PE is combined — ``'add'`` or ``'concat'``.
+                        ``'concat'`` widens the input projection for
+                        ``neuron``/``random`` PE types.
+        num_pe_neuron:  PE neurons for ``neuron``/``random`` PE in concat mode.
+        neuron_pe_scale: Frequency scale for neuron PE.
+        normalize:      RevIN-style per-instance normalization.
     """
-    SpikGRU: channel-independent Spiking GRU.
 
-    Each variate is processed independently along the sequence dimension.
-    The hidden state after T_seq GRU steps is projected to pred_len.
-
-    Args (from configs namespace):
-        seq_len    : input length L
-        pred_len   : forecast horizon H
-        enc_in     : number of input variables D
-        hidden_dim : GRU hidden size
-        levels     : number of stacked GRU layers
-        T          : SNN time-steps for the LIF quantisation
-        tau        : LIF membrane time constant
-        patch_dim  : input embedding size (1 → patch_dim via Conv1d)
-        dropout    : dropout rate (default 0.1)
-    """
-
-    def __init__(self, configs):
+    def __init__(
+        self,
+        input_len: int,
+        T: int,
+        blocks: int,
+        D: int,
+        pred_len: int,
+        tau: float,
+        hidden_dim: int,
+        encoder_type: str = 'conv',
+        pe_type: str = 'none',
+        pe_mode: str = 'add',
+        num_pe_neuron: int = 10,
+        neuron_pe_scale: float = 1000.0,
+        normalize: bool = True,
+    ):
         super().__init__()
-        self.pred_len = configs.pred_len
-        self.seq_len = configs.seq_len
-        D = configs.enc_in
-        hidden = configs.hidden_dim
-        patch_dim = configs.patch_dim
-        T = configs.T
-        tau = configs.tau
-        layers = configs.levels
-        dropout = getattr(configs, 'dropout', 0.1)
+        self.pe_type = pe_type
+        self.normalize = normalize
 
-        # Embed each variate: (BD, 1, L) → (BD, patch_dim, L) → (BD, L, patch_dim)
-        self.input_proj = nn.Conv1d(1, patch_dim, kernel_size=1)
+        # Spike encoder: (B, L, D) → (T, B, D, L)
+        if encoder_type == 'conv':
+            self.spike_encoder = ConvEncoder(output_size=T, tau=tau)
+        elif encoder_type == 'delta':
+            self.spike_encoder = DeltaEncoder(output_size=T, tau=tau)
+        else:
+            raise ValueError(f'Unknown encoder_type: {encoder_type!r}')
 
-        # Stacked GRU cells
-        self.cells = nn.ModuleList()
-        for i in range(layers):
-            in_size = patch_dim if i == 0 else hidden
-            self.cells.append(SpikeGRUCell(in_size, hidden, T, tau))
+        # Positional encoding (optional)
+        if pe_type != 'none':
+            self.pe = PositionEmbedding(
+                input_size=D,
+                pe_type=pe_type,
+                pe_mode=pe_mode,
+                num_pe_neuron=num_pe_neuron,
+                neuron_pe_scale=neuron_pe_scale,
+                num_steps=T,
+            )
 
-        self.dropout = nn.Dropout(dropout)
+        # Input projection: D (possibly widened by concat PE) → hidden_dim
+        proj_in = (
+            D + num_pe_neuron
+            if (pe_type in ('neuron', 'random') and pe_mode == 'concat')
+            else D
+        )
+        self.input_proj = nn.Linear(proj_in, hidden_dim)
+        self.init_lif = _make_lif(tau)
+
+        # Stacked GRU cells (input_size == hidden_dim for all layers after projection)
+        self.net = nn.ModuleList([
+            SpikeGRUCell(hidden_dim, hidden_dim, tau) for _ in range(blocks)
+        ])
+
+        # Decoder: hidden_dim → D → BN → LIF → L → pred_len
+        self.dense1 = nn.Linear(hidden_dim, D)
         self.bn = nn.BatchNorm1d(D)
-        self.out_proj = nn.Linear(hidden, configs.pred_len)
+        self.out_lif = _make_lif(tau)
+        self.dense2 = nn.Linear(input_len, pred_len)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # x: (B, L, D)
-        mean = x.mean(1, keepdim=True).detach()
-        x = x - mean
-        std = torch.sqrt(torch.var(x, dim=1, keepdim=True, unbiased=False) + 1e-5).detach()
-        x = x / std
+        if self.normalize:
+            mean = x.mean(dim=1, keepdim=True).detach()            # (B, 1, D)
+            x = x - mean
+            std = torch.sqrt(
+                torch.var(x, dim=1, keepdim=True, unbiased=False) + 1e-5
+            ).detach()                                              # (B, 1, D)
+            x = x / std
 
-        B, L, D = x.shape
+        # Spike encoding
+        h = self.spike_encoder(x)                                  # (T, B, D, L)
+        h = h.transpose(-1, -2)                                    # (T, B, L, D)
+        T, B, L, _ = h.shape
 
-        # Channel-independent: (B, L, D) → (BD, 1, L) → embed → (BD, L, patch_dim)
-        x = x.permute(0, 2, 1).reshape(B * D, 1, L)
-        x = self.input_proj(x).permute(0, 2, 1).contiguous()  # (BD, L, patch_dim)
+        # Positional encoding
+        if self.pe_type != 'none':
+            h = self.pe(h)                                         # (T, B, L, D')
 
-        # Unroll GRU over sequence
-        h_list = [torch.zeros(B * D, cell.hidden_size, device=x.device)
-                  for cell in self.cells]
+        # Input projection + init spike
+        h = self.input_proj(h.flatten(0, 1)).reshape(T, B, L, -1) # (T, B, L, hidden_dim)
+        h = self.init_lif(h)
 
-        for t in range(L):
-            inp = x[:, t, :]  # (BD, patch_dim or hidden)
-            for i, cell in enumerate(self.cells):
-                h_list[i] = cell(inp, h_list[i])
-                inp = self.dropout(h_list[i])
+        # Stacked GRU cells
+        for cell in self.net:
+            h = cell(h)                                            # (T, B, L, hidden_dim)
 
-        # Final hidden state → forecast
-        h_last = h_list[-1]                                         # (BD, hidden)
-        out = self.out_proj(h_last)                                 # (BD, pred_len)
-        out = out.reshape(B, D, self.pred_len).permute(0, 2, 1)    # (B, pred_len, D)
+        # Decoder: hidden_dim → D → BN → LIF → L → pred_len
+        h = self.dense1(h)                                         # (T, B, L, D)
+        h = h.flatten(0, 1).permute(0, 2, 1)                      # (TB, D, L)
+        h = self.bn(h)
+        h = h.permute(0, 2, 1).reshape(T, B, L, -1)               # (T, B, L, D)
+        h = self.out_lif(h)
 
-        return out * std + mean
+        h = h.permute(0, 1, 3, 2)                                 # (T, B, D, L)
+        h = self.dense2(h)                                         # (T, B, D, pred_len)
+        h = h.permute(0, 1, 3, 2)                                 # (T, B, pred_len, D)
+
+        out = h.mean(dim=0)                                        # (B, pred_len, D)
+
+        if self.normalize:
+            out = out * std + mean
+
+        return out

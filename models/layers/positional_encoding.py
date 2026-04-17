@@ -3,7 +3,12 @@
 Adapted from SeqSNN (Microsoft, MIT License):
 https://github.com/microsoft/SeqSNN  (SeqSNN/module/positional_encoding.py)
 
-All modules accept and return (T, B, L, D) tensors.
+All main PE modules accept and return (T, B, L, D) tensors.
+
+Additional utilities for XNOR attention variants:
+  generate_gray_code_matrix  — appends Gray-code position bits to Q/K tensors
+  create_symmetric_matrix    — builds log-distance symmetric bias for XNOR_Log attention
+  CPGLinear                  — CPG-modulated input projection used by SpikformerV CPG variant
 """
 
 import math
@@ -198,3 +203,111 @@ class PositionEmbedding(nn.Module):
             return x_flat.reshape(T, B, L, -1)
         else:  # neuron, random
             return self.emb(x)
+
+
+# ---------------------------------------------------------------------------
+# XNOR attention utilities  (used by SSA_XNOR in spike_attention.py)
+# ---------------------------------------------------------------------------
+
+def generate_gray_code_matrix(M: torch.Tensor, num_bits: int = 10) -> torch.Tensor:
+    """Append Gray-code position bits to Q or K tensors for XNOR_Gray attention.
+
+    Encodes T*L positions as unique Gray-code bit vectors and concatenates them
+    to the last dimension of M, widening the feature space before XNOR similarity.
+
+    Args:
+        M:        (T, B, H, L, D_head) — per-head Q or K tensor.
+        num_bits: Number of Gray-code bits to append (default 10 → 2^10=1024 unique codes).
+
+    Returns:
+        (T, B, H, L, D_head + num_bits)
+    """
+    T, B, H, L, _ = M.shape
+    indices = torch.arange(T * L, device=M.device)
+    gray = indices ^ (indices >> 1)
+    bits = (
+        (gray.unsqueeze(-1) >> torch.arange(num_bits - 1, -1, -1, device=M.device)) & 1
+    ).float()                                                        # (T*L, num_bits)
+    bits = bits.view(T, 1, 1, L, num_bits).expand(T, B, H, L, num_bits)
+    return torch.cat([M, bits], dim=-1)
+
+
+def create_symmetric_matrix(L: int, device=None) -> torch.Tensor:
+    """Build a symmetric log-distance bias matrix for XNOR_Log attention.
+
+    Entry (i, i) = ceil(log2(L)); off-diagonal entries decay linearly from
+    (diag-1) down to 0 as |i-j| increases.  Returned with broadcast-ready
+    leading singleton dims (1, 1, 1, L, L).
+
+    Args:
+        L:      Sequence length.
+        device: Target torch device (optional).
+
+    Returns:
+        Tensor of shape (1, 1, 1, L, L).
+    """
+    diag = math.ceil(math.log2(max(L, 2)))
+    matrix = torch.zeros(L, L, dtype=torch.int)
+    for i in range(L):
+        matrix[i, i] = diag
+        if i < L - 1:
+            values = torch.linspace(diag - 1, 0, steps=L - i - 1).round().int()
+            matrix[i, i + 1:] = values
+            matrix[i + 1:, i] = values
+    if device is not None:
+        matrix = matrix.to(device)
+    return matrix.unsqueeze(0).unsqueeze(0).unsqueeze(0)            # (1, 1, 1, L, L)
+
+
+# ---------------------------------------------------------------------------
+# CPGLinear — CPG-modulated input projection (used by SpikformerV 'cpg' variant)
+# ---------------------------------------------------------------------------
+
+class CPGLinear(nn.Module):
+    """Position-aware input projection using Central Pattern Generator encoding.
+
+    Combines a standard linear projection with a CPG positional bias that uses
+    the same binarized sinusoidal formula as NeuronPE (heaviside-thresholded
+    sin/cos) but applied as an additive linear bias over position, not as a
+    pre-projection PE step.
+
+    Replaces the (PositionEmbedding + nn.Linear) pair in the 'cpg' Spikformer
+    variant: the CPG signal is fused directly into the input projection so no
+    separate PE module is needed.
+
+    Args:
+        input_size:    Input channel dimension D.
+        output_size:   Output embedding dimension d_model.
+        num_pe_neuron: Number of CPG oscillator neurons (default 10).
+        w_max:         Frequency scale (default 10000.0, same as NeuronPE).
+        max_len:       Maximum supported sequence*step length T*L (default 50000).
+        dropout:       Dropout on input before projection (default 0.1).
+
+    Input:  (B, TL, D)  — B batches, TL = T*seq_len flattened positions, D channels.
+    Output: (B, TL, d_model)
+    """
+
+    def __init__(self, input_size: int, output_size: int,
+                 num_pe_neuron: int = 10, w_max: float = 10000.0,
+                 max_len: int = 50000, dropout: float = 0.1):
+        super().__init__()
+        pe = torch.zeros(max_len, num_pe_neuron)
+        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(
+            torch.arange(0, num_pe_neuron, 2).float() * (-math.log(w_max) / num_pe_neuron)
+        )
+        div_term_odd = torch.exp(
+            torch.arange(0, num_pe_neuron - 1, 2).float() * (-math.log(w_max) / num_pe_neuron)
+        )
+        pe[:, 0::2] = torch.heaviside(torch.sin(position * div_term) - 0.8, torch.ones(1))
+        pe[:, 1::2] = torch.heaviside(torch.cos(position * div_term_odd) - 0.8, torch.ones(1))
+        self.register_buffer('cpg', pe)                             # (max_len, num_pe_neuron)
+
+        self.inp_linear = nn.Linear(input_size, output_size)
+        self.cpg_linear = nn.Linear(num_pe_neuron, output_size)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # x: (B, TL, D)
+        cpg_bias = self.cpg_linear(self.cpg[:x.size(1)])           # (TL, output_size)
+        return self.inp_linear(self.dropout(x)) + cpg_bias         # (B, TL, output_size)

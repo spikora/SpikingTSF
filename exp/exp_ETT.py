@@ -12,13 +12,14 @@ import warnings
 from models.SpikF import SpikF
 from models.iSpikformer import iSpikformer
 from models.SpikeRNN import SpikeRNN
-from models.SpikTCN import Model as SpikTCN
-from models.SpikGRU import Model as SpikGRU
+from models.SpikTCN import SpikeTCN
+from models.SpikGRU import SpikeGRU
 from models.TSLIF import Model as TSLIF
 
 # --- SNN models (spikingjelly activation_based backend, adapted from SeqSNN) ---
-from models.Spikformer import Model as Spikformer
-from models.Spikingformer import Model as Spikingformer
+from models.Spikformer import Spikformer
+from models.Spikingformer import Spikingformer
+from models.QKFormer import QKFormer
 
 # --- ANN baselines ---
 from models.DLinear import Model as DLinear
@@ -49,20 +50,15 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 
 # Models that use the Model(configs) convention — enc_in injected before init
 _NEW_STYLE_MODELS = {
-    'SpikTCN', 'SpikGRU', 'TSLIF', 'DLinear',
-    'Spikformer', 'Spikingformer', 'ITransformer',
+    'TSLIF', 'DLinear', 'ITransformer',
 }
 
 # Models that are pure ANN (no spikingjelly reset needed)
 _ANN_MODELS = {'DLinear', 'ITransformer'}
 
 _NEW_STYLE_CLASS = {
-    'SpikTCN': SpikTCN,
-    'SpikGRU': SpikGRU,
     'TSLIF': TSLIF,
     'DLinear': DLinear,
-    'Spikformer': Spikformer,
-    'Spikingformer': Spikingformer,
     'ITransformer': ITransformer,
 }
 
@@ -133,6 +129,96 @@ class Exp_ETT(Exp_Basic):
                 pe_mode=getattr(self.args, 'pe_mode', 'add'),
                 num_pe_neuron=getattr(self.args, 'num_pe_neuron', 10),
                 neuron_pe_scale=getattr(self.args, 'neuron_pe_scale', 1000.0),
+            )
+        elif name == 'SpikeTCN':
+            model = SpikeTCN(
+                input_len=self.args.seq_len,
+                T=self.args.T,
+                blocks=self.args.levels,
+                D=self.input_dim,
+                pred_len=self.args.pred_len,
+                tau=self.args.tau,
+                hidden_dim=self.args.alpha,
+                kernel_size=getattr(self.args, 'kernel_size', 3),
+                encoder_type=getattr(self.args, 'encoder_type', 'conv'),
+                pe_type=getattr(self.args, 'pe_type', 'none'),
+                num_pe_neuron=getattr(self.args, 'num_pe_neuron', 10),
+                neuron_pe_scale=getattr(self.args, 'neuron_pe_scale', 1000.0),
+            )
+        elif name == 'SpikeGRU':
+            model = SpikeGRU(
+                input_len=self.args.seq_len,
+                T=self.args.T,
+                blocks=self.args.levels,
+                D=self.input_dim,
+                pred_len=self.args.pred_len,
+                tau=self.args.tau,
+                hidden_dim=self.args.alpha,
+                encoder_type=getattr(self.args, 'encoder_type', 'conv'),
+                pe_type=getattr(self.args, 'pe_type', 'none'),
+                pe_mode=getattr(self.args, 'pe_mode', 'add'),
+                num_pe_neuron=getattr(self.args, 'num_pe_neuron', 10),
+                neuron_pe_scale=getattr(self.args, 'neuron_pe_scale', 1000.0),
+            )
+        elif name == 'Spikformer':
+            model = Spikformer(
+                input_len=self.args.seq_len,
+                T=self.args.T,
+                blocks=self.args.levels,
+                D=self.input_dim,
+                pred_len=self.args.pred_len,
+                tau=self.args.tau,
+                d_model=self.args.alpha,
+                d_ff=getattr(self.args, 'd_ff', None),
+                heads=getattr(self.args, 'heads', 8),
+                common_thr=getattr(self.args, 'common_thr', 1.0),
+                qk_scale=getattr(self.args, 'qk_scale', 0.125),
+                encoder_type=getattr(self.args, 'encoder_type', 'conv'),
+                pe_type=getattr(self.args, 'pe_type', 'none'),
+                pe_mode=getattr(self.args, 'pe_mode', 'add'),
+                attn_type=getattr(self.args, 'attn_type', 'standard'),
+                gray_bits=getattr(self.args, 'gray_bits', 10),
+                num_pe_neuron=getattr(self.args, 'num_pe_neuron', 10),
+                neuron_pe_scale=getattr(self.args, 'neuron_pe_scale', 1000.0),
+                dropout=getattr(self.args, 'dropout', 0.1),
+            )
+        elif name == 'Spikingformer':
+            model = Spikingformer(
+                input_len=self.args.seq_len,
+                T=self.args.T,
+                blocks=self.args.levels,
+                D=self.input_dim,
+                pred_len=self.args.pred_len,
+                tau=self.args.tau,
+                d_model=self.args.alpha,
+                d_ff=getattr(self.args, 'd_ff', None),
+                heads=getattr(self.args, 'heads', 8),
+                common_thr=getattr(self.args, 'common_thr', 1.0),
+                qk_scale=getattr(self.args, 'qk_scale', 0.125),
+                encoder_type=getattr(self.args, 'encoder_type', 'conv'),
+                pe_type=getattr(self.args, 'pe_type', 'conv'),
+                attn_type=getattr(self.args, 'attn_type', 'standard'),
+                gray_bits=getattr(self.args, 'gray_bits', 10),
+                dropout=getattr(self.args, 'dropout', 0.1),
+            )
+        elif name == 'QKFormer':
+            model = QKFormer(
+                input_len=self.args.seq_len,
+                T=self.args.T,
+                blocks=self.args.levels,
+                D=self.input_dim,
+                pred_len=self.args.pred_len,
+                tau=self.args.tau,
+                d_model=self.args.alpha,
+                d_ff=getattr(self.args, 'd_ff', None),
+                heads=getattr(self.args, 'heads', 8),
+                common_thr=getattr(self.args, 'common_thr', 1.0),
+                qk_scale=getattr(self.args, 'qk_scale', 0.125),
+                encoder_type=getattr(self.args, 'encoder_type', 'conv'),
+                pe_type=getattr(self.args, 'pe_type', 'conv'),
+                attn_type=getattr(self.args, 'attn_type', 'standard'),
+                gray_bits=getattr(self.args, 'gray_bits', 10),
+                dropout=getattr(self.args, 'dropout', 0.1),
             )
         else:
             # Default: SpikF
