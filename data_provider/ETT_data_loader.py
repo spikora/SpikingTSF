@@ -236,32 +236,6 @@ class Solar(Dataset):
         self.scaler = StandardScaler()
         filepath = os.path.join(self.root_path, self.data_path)
 
-        if filepath.endswith('.txt'):
-            # Headerless comma-delimited — SeqSNN / LSTNet format
-            try:
-                raw = np.loadtxt(filepath, delimiter=',', dtype=np.float32)
-            except ValueError:
-                raw = np.loadtxt(filepath, delimiter='\t', dtype=np.float32)
-            if raw.ndim == 1:
-                raw = raw.reshape(-1, 1)
-            T = len(raw)
-            num_train = int(T * 0.6)
-            num_test  = int(T * 0.2)
-            num_vali  = T - num_train - num_test
-            border1s = [0, num_train - self.seq_len, T - num_test - self.seq_len]
-            border2s = [num_train, num_train + num_vali, T]
-            b1, b2 = border1s[self.set_type], border2s[self.set_type]
-            if self.features == 'S':
-                raw = raw[:, [0]]
-            if self.scale:
-                self.scaler.fit(raw[border1s[0]:border2s[0]])
-                scaled = self.scaler.transform(raw)
-            else:
-                scaled = raw
-            self.data_x = scaled[b1:b2]
-            self.data_y = raw[b1:b2] if self.inverse else scaled[b1:b2]
-            return
-
         # CSV / H5 path (legacy)
         if filepath.endswith('.csv'):
             df_raw = pd.read_csv(filepath)
@@ -269,6 +243,13 @@ class Solar(Dataset):
             df_raw = pd.read_hdf(filepath).reset_index()
         else:
             raise ValueError(f"Unsupported file format for Solar: {filepath}")
+
+        if self.cols:
+            cols=self.cols.copy()
+            cols.remove(self.target)
+        else:
+            cols = list(df_raw.columns)
+
 
         T = len(df_raw)
         num_train = int(T * 0.6)

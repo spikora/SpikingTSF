@@ -201,6 +201,7 @@ cython_debug/
 
 # Local reference repos
 SeqSNN/ # remove later
+SeqSNN-RPE/ # remove later
 SpikF/ # remove later
 .cursorignore
 .cursorindexingignore

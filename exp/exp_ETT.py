@@ -113,10 +113,18 @@ class Exp_ETT(Exp_Basic):
             )
         elif name == 'SpikeRNN':
             model = SpikeRNN(
-                self.args.seq_len, self.args.patch_num, self.args.patch_dim,
-                self.args.T, self.args.levels, self.input_dim,
-                self.args.pred_len, self.args.tau, self.args.alpha,
-                self.args.hidden_dim,
+                input_len=self.args.seq_len,
+                T=self.args.T,
+                blocks=self.args.levels,
+                D=self.input_dim,
+                pred_len=self.args.pred_len,
+                tau=self.args.tau,
+                hidden_dim=self.args.alpha,
+                encoder_type=getattr(self.args, 'encoder_type', 'conv'),
+                pe_type=getattr(self.args, 'pe_type', 'none'),
+                pe_mode=getattr(self.args, 'pe_mode', 'add'),
+                num_pe_neuron=getattr(self.args, 'num_pe_neuron', 10),
+                neuron_pe_scale=getattr(self.args, 'neuron_pe_scale', 1000.0),
             )
         else:
             # Default: SpikF

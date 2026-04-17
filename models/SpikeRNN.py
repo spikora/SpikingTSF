@@ -1,91 +1,182 @@
+"""SpikeRNN model implementation.
+
+Reference:
+    Lv, Changze, Yansen Wang, Dongqi Han, Xiaoqing Zheng,
+    Xuanjing Huang, and Dongsheng Li.
+    "Efficient and Effective Time-Series Forecasting with Spiking Neural Networks."
+    arXiv preprint arXiv:2402.01533, 2024.
+    Paper: https://arxiv.org/abs/2402.01533
+
+Official project repository:
+    https://github.com/microsoft/SeqSNN
+
+Architecture follows SeqSNN's SpikeRNN network:
+  1. Spike encoder (conv or delta) → (T, B, D, L)
+  2. Transpose to (T, B, L, D)
+  3. Optional positional encoding
+  4. Linear input projection + init LIF → (T, B, L, hidden_dim)
+  5. Stack of SpikeRNNCell (Linear + LIF) blocks
+  6. Decoder: Linear(hidden_dim→D) → BN → LIF → Linear(L→pred_len) → mean T → (B, pred_len, D)
+"""
+
 import torch
 from torch import nn
-from spikingjelly.clock_driven.neuron import MultiStepLIFNode
+from spikingjelly.activation_based import surrogate, neuron, functional
+
+from models.layers.spike_encoder import ConvEncoder, DeltaEncoder
+from models.layers.positional_encoding import PositionEmbedding
+
+_TAU = 2.0
 
 
-class SPE(nn.Module):
-    def __init__(self, input_len, patch_num, patch_dim, T, tau, D):
+def _make_lif(tau: float) -> neuron.LIFNode:
+    return neuron.LIFNode(
+        tau=tau, step_mode='m', detach_reset=True,
+        surrogate_function=surrogate.ATan(),
+    )
+
+
+class SpikeRNNCell(nn.Module):
+    """Single recurrent spiking cell: Linear + multi-step LIF.
+
+    Input/output shape: (T, B, L, C).
+    The LIF membrane potential persists across SNN time steps T, acting as
+    the recurrent hidden state.
+    """
+
+    def __init__(self, input_size: int, output_size: int, tau: float = _TAU):
         super().__init__()
-        self.patch_projector = nn.Linear(input_len // patch_num, patch_dim)
-        self.bn = nn.BatchNorm2d(patch_dim)
-        self.encoder_lif = MultiStepLIFNode(tau=tau, detach_reset=False, backend='torch')
+        self.linear = nn.Linear(input_size, output_size)
+        self.lif = _make_lif(tau)
 
-        self.D = D
-        self.T = T
-        self.patch_dim = patch_dim
-        self.patch_num = patch_num
-
-    def forward(self, x):
-        B, L, D = x.shape
-
-        x = x.view(B, self.patch_num, L // self.patch_num, D).contiguous()
-        x = x.transpose(-1, -2).contiguous()
-        x = self.patch_projector(x)
-        x = x.repeat(self.T, 1, 1, 1, 1)
-        x = x.permute(0, 1, 4, 2, 3).contiguous()
-        x = x.flatten(0, 1)
-        x = self.bn(x)
-        x = x.view(self.T, B, self.patch_dim, self.patch_num, D)
-        x = self.encoder_lif(x)
-
-        return x
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # x: (T, B, L, input_size)
+        T, B, L, _ = x.shape
+        x = x.flatten(0, 1)                    # (TB, L, input_size)
+        x = self.linear(x)                     # (TB, L, output_size)
+        x = x.reshape(T, B, L, -1)
+        return self.lif(x)                     # (T, B, L, output_size)
 
 
-# BUG FIX: removed unused `mean`, `last`, `std` constructor parameters
 class SpikeRNN(nn.Module):
-    def __init__(self, input_len, patch_num, patch_dim, T, blocks, D, pred_len, tau, alpha, hidden_dim):
+    """SpikeRNN for long-term time-series forecasting.
+
+    Args:
+        input_len:       Sequence length (L = seq_len).
+        T:               Number of SNN time steps.
+        blocks:          Number of SpikeRNNCell layers.
+        D:               Number of input/output channels (enc_in).
+        pred_len:        Prediction horizon.
+        tau:             LIF membrane time constant.
+        hidden_dim:      Hidden dimension of recurrent cells and decoder.
+        encoder_type:    Spike encoder — 'conv' or 'delta'.
+        pe_type:         Positional encoding type — 'none', 'learn', 'static',
+                         'conv', 'neuron', or 'random'.
+        pe_mode:         How PE is applied — 'add' or 'concat'.
+                         'concat' is only meaningful for pe_type in
+                         {'neuron', 'random'} and widens the projection input.
+        num_pe_neuron:   Number of PE neurons (neuron/random PE, concat mode).
+        neuron_pe_scale: Frequency scale for neuron PE.
+        normalize:       RevIN-style instance normalization.
+    """
+
+    def __init__(
+        self,
+        input_len: int,
+        T: int,
+        blocks: int,
+        D: int,
+        pred_len: int,
+        tau: float,
+        hidden_dim: int,
+        encoder_type: str = 'conv',
+        pe_type: str = 'none',
+        pe_mode: str = 'add',
+        num_pe_neuron: int = 10,
+        neuron_pe_scale: float = 1000.0,
+        normalize: bool = True,
+    ):
         super().__init__()
-        self.emb = SPE(input_len, patch_num, patch_dim, T, tau, D)
+        self.pe_type = pe_type
+        self.normalize = normalize
 
-        self.recurrent = nn.ModuleList()
-        self.rec_bns = nn.ModuleList()
-        self.rec_lifs = nn.ModuleList()
+        # Spike encoder: (B, L, D) → (T, B, D, L)
+        if encoder_type == 'conv':
+            self.spike_encoder = ConvEncoder(output_size=T, tau=tau)
+        elif encoder_type == 'delta':
+            self.spike_encoder = DeltaEncoder(output_size=T, tau=tau)
+        else:
+            raise ValueError(f'Unknown encoder_type: {encoder_type}')
 
-        for i in range(blocks):
-            self.recurrent.append(nn.Linear(patch_num + hidden_dim, hidden_dim))
-            self.rec_bns.append(nn.BatchNorm2d(patch_dim))
-            self.rec_lifs.append(MultiStepLIFNode(tau=tau, detach_reset=False, backend='torch'))
+        # Positional encoding (optional)
+        if pe_type != 'none':
+            self.pe = PositionEmbedding(
+                input_size=D,
+                pe_type=pe_type,
+                pe_mode=pe_mode,
+                num_pe_neuron=num_pe_neuron,
+                neuron_pe_scale=neuron_pe_scale,
+                dropout=0.1,
+                num_steps=T,
+            )
 
-        self.dense1 = nn.Linear(patch_dim * (patch_num + hidden_dim), hidden_dim)
-        self.dense2 = nn.Linear(hidden_dim, pred_len)
-        self.bn = nn.BatchNorm1d(D)
-        self.activ = MultiStepLIFNode(tau=tau, detach_reset=False, backend='torch')
-        self.hidden = hidden_dim
+        # Input projection: D (possibly widened by concat PE) → hidden_dim
+        proj_in = D + num_pe_neuron if (pe_type in ('neuron', 'random') and pe_mode == 'concat') else D
+        self.input_proj = nn.Linear(proj_in, hidden_dim)
+        self.init_lif = _make_lif(tau)
 
-    def forward(self, x):
-        mean = x.mean(dim=1, keepdim=True).detach()
-        x = x - mean
+        # Recurrent blocks
+        self.net = nn.ModuleList([
+            SpikeRNNCell(hidden_dim, hidden_dim, tau) for _ in range(blocks)
+        ])
 
-        std = torch.sqrt(torch.var(x, dim=1, keepdim=True, unbiased=False) + 1e-5).detach()
-        x = x / std
+        # Decoder
+        self.dense1 = nn.Linear(hidden_dim, D)
+        self.bn = nn.BatchNorm1d(D)              # applied over (TB, D, L) shape
+        self.out_lif = _make_lif(tau)
+        self.dense2 = nn.Linear(input_len, pred_len)
 
-        x = self.emb(x)
-        T, B, pd, pn, D = x.shape
-        h = torch.zeros([T, B, pd, self.hidden, D]).to(x.device)
-        x0 = x.transpose(-1, -2)
-        x = torch.cat((x, h), dim=-2).contiguous()
-        x = x.transpose(-1, -2).contiguous()
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # x: (B, L, D)
+        if self.normalize:
+            mean = x.mean(dim=1, keepdim=True).detach()    # (B, 1, D)
+            x = x - mean
+            std = torch.sqrt(
+                torch.var(x, dim=1, keepdim=True, unbiased=False) + 1e-5
+            ).detach()                                      # (B, 1, D)
+            x = x / std
 
-        for i in range(len(self.recurrent)):
-            h = self.recurrent[i](x)
-            x = torch.cat((x0, h), dim=-1).contiguous()
-            x = x.flatten(0, 1)
-            x = self.rec_bns[i](x)
-            x = x.view(T, B, pd, D, -1)
-            x = self.rec_lifs[i](x)
+        # Spike encoding
+        h = self.spike_encoder(x)                          # (T, B, D, L)
+        h = h.transpose(-1, -2)                            # (T, B, L, D)
+        T, B, L, _ = h.shape
 
-        x = x.permute(0, 1, 3, 2, 4).contiguous()
-        x = x.flatten(-2, -1)
-        x = self.dense1(x)
-        x = x.flatten(0, 1)
-        x = self.bn(x)
-        x = x.view(T, B, D, -1)
-        x = self.activ(x)
-        x = self.dense2(x)
-        x = x.transpose(-1, -2).contiguous()
-        x = x.view(T, B, -1, D)
+        # Positional encoding
+        if self.pe_type != 'none':
+            h = self.pe(h)                                 # (T, B, L, D')
 
-        x = x * std
-        x = x + mean.repeat(T, 1, 1, 1)
+        # Input projection + init spike
+        h = self.input_proj(h.flatten(0, 1)).reshape(T, B, L, -1)  # (T, B, L, hidden_dim)
+        h = self.init_lif(h)
 
-        return x.mean(dim=0)
+        # Recurrent spiking blocks
+        for cell in self.net:
+            h = cell(h)                                    # (T, B, L, hidden_dim)
+
+        # Decoder: hidden_dim → D → BN → LIF → L → pred_len
+        h = self.dense1(h)                                 # (T, B, L, D)
+        h = h.flatten(0, 1).permute(0, 2, 1)              # (TB, D, L)
+        h = self.bn(h)
+        h = h.permute(0, 2, 1).reshape(T, B, L, -1)       # (T, B, L, D)
+        h = self.out_lif(h)
+
+        h = h.permute(0, 1, 3, 2)                         # (T, B, D, L)
+        h = self.dense2(h)                                 # (T, B, D, pred_len)
+        h = h.permute(0, 1, 3, 2)                         # (T, B, pred_len, D)
+
+        out = h.mean(dim=0)                                # (B, pred_len, D)
+
+        if self.normalize:
+            out = out * std + mean                         # broadcast (B, 1, D)
+
+        return out

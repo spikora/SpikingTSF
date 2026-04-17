@@ -1,9 +1,24 @@
+"""SpikF model implementation.
+
+Reference:
+    Wu, Wenjie, Dexuan Huo, and Hong Chen.
+    "SpikF: Spiking Fourier Network for Efficient Long-term Prediction."
+    In Proceedings of the 42nd International Conference on Machine Learning
+    (ICML 2025), PMLR 267, pp. 67342-67368.
+    Paper: https://proceedings.mlr.press/v267/wu25m.html
+
+Official project repository:
+    https://github.com/WWJ-creator/SpikF
+"""
+
 import torch
 from torch import nn
 from spikingjelly.clock_driven.neuron import MultiStepLIFNode
 
 
 class SPE(nn.Module):
+    """Spiking patch embedding."""
+
     def __init__(self, input_len, patch_num, patch_dim, T, tau, D):
         super().__init__()
         self.patch_projector = nn.Linear(input_len // patch_num, patch_dim)
@@ -32,7 +47,9 @@ class SPE(nn.Module):
 
 
 class SFS(nn.Module):
-    def __init__(self, patch_num, D, patch_dim, tau, alpha):
+    """Spiking Fourier selection block."""
+
+    def __init__(self, patch_num, D, patch_dim, tau):
         super().__init__()
         self.time2freq = nn.Linear(patch_num, patch_num // 2 + 1)
 
@@ -102,26 +119,34 @@ class SFS(nn.Module):
 
 
 class SpikF(nn.Module):
-    def __init__(self, input_len, patch_num, patch_dim, T, blocks, D, pred_len, tau, alpha, hidden_dim):
+    """Spiking Fourier Network for long-term time-series prediction."""
+
+    def __init__(self, input_len, patch_num, patch_dim, T, blocks, D, pred_len, tau, hidden_dim, normalize=True):
         super().__init__()
         self.SPE = SPE(input_len, patch_num, patch_dim, T, tau, D)
 
         self.SFSs = nn.ModuleList()
         for i in range(blocks):
-            self.SFSs.append(SFS(patch_num, D, patch_dim, tau, alpha))
+            self.SFSs.append(SFS(patch_num, D, patch_dim, tau))
 
         self.dense1 = nn.Linear(patch_num * patch_dim, hidden_dim)
         self.dense2 = nn.Linear(hidden_dim, pred_len)
 
         self.bn = nn.BatchNorm1d(D)
         self.activ = nn.GELU()
+        self.normalize = normalize
 
     def forward(self, x):
-        mean = x.mean(dim=1, keepdim=True).detach()
-        x = x - mean
 
-        std = torch.sqrt(torch.var(x, dim=1, keepdim=True, unbiased=False) + 1e-5).detach()
-        x = x / std
+        if self.normalize:
+            mean = x.mean(dim=1, keepdim=True).detach()
+            x = x - mean
+
+            std = torch.sqrt(torch.var(x, dim=1, keepdim=True, unbiased=False) + 1e-5).detach()
+            x = x / std
+        else:
+            mean = None
+            std = None
 
         x = self.SPE(x)
         T, B, pd, pn, D = x.shape
@@ -139,7 +164,8 @@ class SpikF(nn.Module):
         x = x.transpose(-1, -2).contiguous()
         x = x.view(T, B, -1, D)
 
-        x = x * std
-        x = x + mean.repeat(T, 1, 1, 1)
+        if self.normalize:
+            x = x * std
+            x = x + mean.repeat(T, 1, 1, 1)
 
         return x
