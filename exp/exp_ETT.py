@@ -106,10 +106,18 @@ class Exp_ETT(Exp_Basic):
 
         elif name == 'iSpikformer':
             model = iSpikformer(
-                self.args.seq_len, self.args.patch_num, self.args.patch_dim,
-                self.args.T, self.args.levels, self.input_dim,
-                self.args.pred_len, self.args.tau, self.args.alpha,
-                self.args.hidden_dim,
+                input_len=self.args.seq_len,
+                T=self.args.T,
+                blocks=self.args.levels,
+                D=self.input_dim,
+                pred_len=self.args.pred_len,
+                tau=self.args.tau,
+                d_model=self.args.alpha,
+                d_ff=getattr(self.args, 'd_ff', None),
+                heads=getattr(self.args, 'heads', 8),
+                common_thr=getattr(self.args, 'common_thr', 1.0),
+                qk_scale=getattr(self.args, 'qk_scale', 0.125),
+                encoder_type=getattr(self.args, 'encoder_type', 'conv'),
             )
         elif name == 'SpikeRNN':
             model = SpikeRNN(

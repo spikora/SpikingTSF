@@ -1,124 +1,177 @@
+"""iSpikformer model implementation.
+
+Reference:
+    Lv, Changze, Yansen Wang, Dongqi Han, Xiaoqing Zheng,
+    Xuanjing Huang, and Dongsheng Li.
+    "Efficient and Effective Time-Series Forecasting with Spiking Neural Networks."
+    arXiv preprint arXiv:2402.01533, 2024.
+    Paper: https://arxiv.org/abs/2402.01533
+
+Official project repository:
+    https://github.com/microsoft/SeqSNN
+
+Architecture follows SeqSNN's iSpikformer network (iTransformer paradigm):
+  1. Spike encoder (conv or delta)  → (T, B, D, L)
+  2. Transpose                      → (T, B, L, D)
+  3. DataEmbeddingInverted          → (T, B, D, d_model)
+     Each of the D channels is embedded over its L-step history: Linear(L, d_model)
+  4. Stack of Block(SSA + MLP)      → (T, B, D, d_model)
+     Self-attention runs across the D channel tokens (multivariate correlation)
+  5. Last step                      → (B, D, d_model)
+  6. Linear(d_model, pred_len)      → (B, D, pred_len) → transpose → (B, pred_len, D)
+"""
+
 import torch
 from torch import nn
-from spikingjelly.clock_driven.neuron import MultiStepLIFNode
+from spikingjelly.activation_based import surrogate, neuron
+
+from models.layers.spike_encoder import ConvEncoder, DeltaEncoder
+from models.layers.spike_attention import Block
 
 
-class SPE(nn.Module):
-    def __init__(self, input_len, patch_num, patch_dim, T, tau, D):
+def _make_lif(tau: float, common_thr: float = 1.0) -> neuron.LIFNode:
+    return neuron.LIFNode(
+        tau=tau, step_mode='m', detach_reset=True,
+        surrogate_function=surrogate.ATan(),
+        v_threshold=common_thr, backend='torch',
+    )
+
+
+class DataEmbeddingInverted(nn.Module):
+    """Inverted channel-wise temporal embedding.
+
+    Maps each channel's L-step time series to a d_model-dim token via a
+    linear projection, BN, and LIF spike layer.  Follows the iTransformer
+    principle: treat variates as tokens rather than time steps.
+
+    Input : (T, B, L, D) — L time steps, D channels
+    Output: (T, B, D, d_model) — D channel tokens, each with d_model features
+    """
+
+    def __init__(self, seq_len: int, d_model: int, tau: float, common_thr: float = 1.0):
         super().__init__()
-        self.patch_projector = nn.Linear(input_len // patch_num, patch_dim)
-        self.bn = nn.BatchNorm2d(patch_dim)
-        self.encoder_lif = MultiStepLIFNode(tau=tau, detach_reset=False, backend='torch')
+        self.d_model = d_model
+        self.value_embedding = nn.Linear(seq_len, d_model)
+        self.bn = nn.BatchNorm1d(d_model)
+        self.lif = _make_lif(tau, common_thr)
 
-        self.D = D
-        self.T = T
-        self.patch_dim = patch_dim
-        self.patch_num = patch_num
-
-    def forward(self, x):
-        B, L, D = x.shape
-
-        x = x.view(B, self.patch_num, L // self.patch_num, D).contiguous()
-        x = x.transpose(-1, -2).contiguous()
-        x = self.patch_projector(x)
-        x = x.repeat(self.T, 1, 1, 1, 1)
-        x = x.permute(0, 1, 4, 2, 3).contiguous()
-        x = x.flatten(0, 1)
-        x = self.bn(x)
-        x = x.view(self.T, B, self.patch_dim, self.patch_num, D)
-        x = self.encoder_lif(x)
-
-        return x
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # x: (T, B, L, D)
+        T, B, L, D = x.shape
+        x = x.permute(0, 1, 3, 2).flatten(0, 1)                        # (TB, D, L)
+        x = self.value_embedding(x)                                     # (TB, D, d_model)
+        x = self.bn(x.transpose(-1, -2)).transpose(-1, -2)             # (TB, D, d_model)
+        x = x.reshape(T, B, D, self.d_model)
+        return self.lif(x)                                              # (T, B, D, d_model)
 
 
-class iSSA(nn.Module):
-    def __init__(self, patch_num, D, patch_dim, tau, alpha):
-        super().__init__()
-        self.lin1 = nn.Linear(patch_num, patch_num)
-        self.lin2 = nn.Linear(patch_num, patch_num)
-        self.lin3 = nn.Linear(patch_num, patch_num)
-
-        self.lif1 = MultiStepLIFNode(tau=tau, detach_reset=True, backend='torch')
-        self.lif2 = MultiStepLIFNode(tau=tau, detach_reset=True, backend='torch')
-        self.lif3 = MultiStepLIFNode(tau=tau, detach_reset=True, backend='torch')
-        self.lif4 = MultiStepLIFNode(tau=tau, detach_reset=True, backend='torch')
-
-        self.b1 = nn.BatchNorm2d(patch_dim)
-        self.b2 = nn.BatchNorm2d(patch_dim)
-        self.b3 = nn.BatchNorm2d(patch_dim)
-        self.b4 = nn.BatchNorm2d(patch_dim)
-
-    def forward(self, x):
-        res_x = x
-        T, B, pd, pn, D = x.shape
-
-        x = x.transpose(-1, -2).contiguous()
-        q = self.lin1(x).flatten(0, 1)
-        k = self.lin2(x).flatten(0, 1)
-        v = self.lin3(x).flatten(0, 1)
-
-        q = self.b1(q)
-        k = self.b2(k)
-        v = self.b3(v)
-
-        q = q.view(T, B, pd, D, -1)
-        k = k.view(T, B, pd, D, -1)
-        v = v.view(T, B, pd, D, -1)
-
-        q = self.lif1(q)
-        k = self.lif2(k).transpose(-1, -2).contiguous()
-        v = self.lif3(v)
-
-        attn = q @ k
-        attn = attn @ v
-        attn = attn.flatten(0, 1)
-        attn = self.b4(attn)
-        attn = attn.view(T, B, pd, D, pn)
-        attn = self.lif4(attn)
-        attn = attn.transpose(-1, -2).contiguous()
-
-        return attn
-
-
-# BUG FIX: removed unused `mean`, `last`, `std` constructor parameters
 class iSpikformer(nn.Module):
-    def __init__(self, input_len, patch_num, patch_dim, T, blocks, D, pred_len, tau, alpha, hidden_dim):
+    """iSpikformer: inverted spiking transformer for long-term time-series forecasting.
+
+    Args:
+        input_len:    Sequence length (L = seq_len).
+        T:            Number of SNN time steps.
+        blocks:       Number of transformer blocks (depth).
+        D:            Number of input/output channels (enc_in).
+        pred_len:     Prediction horizon.
+        tau:          LIF membrane time constant.
+        d_model:      Per-channel embedding dimension (mapped from ``alpha`` in args).
+        d_ff:         Feedforward hidden size in MLP blocks (default: d_model * 4).
+        heads:        Number of attention heads (must divide d_model).
+        common_thr:   LIF firing threshold for all neurons.
+        qk_scale:     Q·K scaling factor in SSA (default 0.125 = 1/8).
+        encoder_type: Spike encoder variant — ``'conv'`` or ``'delta'``.
+        normalize:    RevIN-style per-instance normalization.
+    """
+
+    def __init__(
+        self,
+        input_len: int,
+        T: int,
+        blocks: int,
+        D: int,
+        pred_len: int,
+        tau: float,
+        d_model: int,
+        d_ff: int = None,
+        heads: int = 8,
+        common_thr: float = 1.0,
+        qk_scale: float = 0.125,
+        encoder_type: str = 'conv',
+        normalize: bool = True,
+    ):
         super().__init__()
-        self.emb = SPE(input_len, patch_num, patch_dim, T, tau, D)
+        self.normalize = normalize
+        d_ff = d_ff or d_model * 4
 
-        self.attn = nn.ModuleList()
-        for i in range(blocks):
-            self.attn.append(iSSA(patch_num, D, patch_dim, tau, alpha))
+        # Spike encoder: (B, L, D) → (T, B, D, L)
+        if encoder_type == 'conv':
+            self.spike_encoder = ConvEncoder(output_size=T, tau=tau)
+        elif encoder_type == 'delta':
+            self.spike_encoder = DeltaEncoder(output_size=T, tau=tau)
+        else:
+            raise ValueError(f'Unknown encoder_type: {encoder_type!r}')
 
-        self.dense1 = nn.Linear(patch_num * patch_dim, hidden_dim)
-        self.dense2 = nn.Linear(hidden_dim, pred_len)
-        self.bn = nn.BatchNorm1d(D)
-        self.activ = MultiStepLIFNode(tau=tau, detach_reset=True, backend='torch')
+        # Inverted embedding: (T, B, L, D) → (T, B, D, d_model)
+        self.emb = DataEmbeddingInverted(input_len, d_model, tau, common_thr)
 
-    def forward(self, x):
-        mean = x.mean(dim=1, keepdim=True).detach()
-        x = x - mean
+        # Transformer blocks: SSA + MLP over D channel tokens with d_model features.
+        # Block(SSA+MLP) operates on (T, B, seq, dim); here seq=D, dim=d_model.
+        self.attn_blocks = nn.ModuleList([
+            Block(
+                length=D,
+                tau=tau,
+                common_thr=common_thr,
+                dim=d_model,
+                d_ff=d_ff,
+                heads=heads,
+                qk_scale=qk_scale,
+            )
+            for _ in range(blocks)
+        ])
 
-        std = torch.sqrt(torch.var(x, dim=1, keepdim=True, unbiased=False) + 1e-5).detach()
-        x = x / std
+        # Decoder: project each channel's d_model embedding to pred_len
+        self.dense = nn.Linear(d_model, pred_len)
 
-        x = self.emb(x)
-        T, B, pd, pn, D = x.shape
+        self._init_weights()
 
-        for attn_block in self.attn:
-            x = attn_block(x)
+    def _init_weights(self):
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.normal_(m.weight, std=0.02)
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0.0)
+            elif isinstance(m, nn.LayerNorm):
+                nn.init.constant_(m.weight, 1.0)
+                nn.init.constant_(m.bias, 0.0)
 
-        x = x.permute(0, 1, 4, 2, 3).contiguous()
-        x = x.flatten(-2, -1)
-        x = self.dense1(x)
-        x = x.flatten(0, 1)
-        x = self.bn(x)
-        x = self.activ(x)
-        x = self.dense2(x)
-        x = x.transpose(-1, -2).contiguous()
-        x = x.view(T, B, -1, D)
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # x: (B, L, D)
+        if self.normalize:
+            mean = x.mean(dim=1, keepdim=True).detach()                # (B, 1, D)
+            x = x - mean
+            std = torch.sqrt(
+                torch.var(x, dim=1, keepdim=True, unbiased=False) + 1e-5
+            ).detach()                                                  # (B, 1, D)
+            x = x / std
 
-        x = x * std
-        x = x + mean.repeat(T, 1, 1, 1)
+        # Spike encoding
+        h = self.spike_encoder(x)                                      # (T, B, D, L)
+        h = h.transpose(-1, -2)                                        # (T, B, L, D)
 
-        return x.mean(dim=0)
+        # Inverted embedding: embed each channel over its temporal history
+        h = self.emb(h)                                                # (T, B, D, d_model)
+
+        # Self-attention across channel tokens
+        for blk in self.attn_blocks:
+            h = blk(h)                                                 # (T, B, D, d_model)
+
+        # Decode: last step→ project d_model → pred_len
+        out = h[-1, :, :, :]                                          # (B, D, d_model)
+        out = self.dense(out)                                          # (B, D, pred_len)
+        out = out.transpose(-1, -2)                                    # (B, pred_len, D)
+
+        if self.normalize:
+            out = out * std + mean                                     # broadcast (B, 1, D)
+
+        return out
