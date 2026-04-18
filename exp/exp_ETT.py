@@ -14,6 +14,9 @@ from models.iSpikformer import iSpikformer
 from models.SpikeRNN import SpikeRNN
 from models.SpikTCN import SpikeTCN
 from models.SpikGRU import SpikeGRU
+from models.TSGRU import TSGRU
+from models.TSTCN import TSTCN
+from models.TSFormer import TSFormer
 from models.TSLIF import Model as TSLIF
 
 # --- SNN models (spikingjelly activation_based backend, adapted from SeqSNN) ---
@@ -219,6 +222,51 @@ class Exp_ETT(Exp_Basic):
                 attn_type=getattr(self.args, 'attn_type', 'standard'),
                 gray_bits=getattr(self.args, 'gray_bits', 10),
                 dropout=getattr(self.args, 'dropout', 0.1),
+            )
+        elif name == 'TSGRU':
+            model = TSGRU(
+                input_len=self.args.seq_len,
+                T=self.args.T,
+                blocks=self.args.levels,
+                D=self.input_dim,
+                pred_len=self.args.pred_len,
+                tau=self.args.tau,
+                hidden_dim=self.args.alpha,
+                encoder_type=getattr(self.args, 'encoder_type', 'conv'),
+                pe_type=getattr(self.args, 'pe_type', 'none'),
+                pe_mode=getattr(self.args, 'pe_mode', 'add'),
+                num_pe_neuron=getattr(self.args, 'num_pe_neuron', 10),
+                neuron_pe_scale=getattr(self.args, 'neuron_pe_scale', 1000.0),
+            )
+        elif name == 'TSTCN':
+            model = TSTCN(
+                input_len=self.args.seq_len,
+                T=self.args.T,
+                blocks=self.args.levels,
+                D=self.input_dim,
+                pred_len=self.args.pred_len,
+                tau=self.args.tau,
+                hidden_dim=self.args.alpha,
+                kernel_size=getattr(self.args, 'kernel_size', 3),
+                encoder_type=getattr(self.args, 'encoder_type', 'conv'),
+                pe_type=getattr(self.args, 'pe_type', 'none'),
+                num_pe_neuron=getattr(self.args, 'num_pe_neuron', 10),
+                neuron_pe_scale=getattr(self.args, 'neuron_pe_scale', 1000.0),
+            )
+        elif name == 'TSFormer':
+            model = TSFormer(
+                input_len=self.args.seq_len,
+                T=self.args.T,
+                blocks=self.args.levels,
+                D=self.input_dim,
+                pred_len=self.args.pred_len,
+                tau=self.args.tau,
+                d_model=self.args.alpha,
+                d_ff=getattr(self.args, 'd_ff', None),
+                heads=getattr(self.args, 'heads', 8),
+                common_thr=getattr(self.args, 'common_thr', 1.0),
+                qk_scale=getattr(self.args, 'qk_scale', 0.125),
+                encoder_type=getattr(self.args, 'encoder_type', 'conv'),
             )
         else:
             # Default: SpikF

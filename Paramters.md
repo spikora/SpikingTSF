@@ -626,3 +626,239 @@ def __init__(
 - `xnor` is not a valid `attn_type` for QKFormer (only `xnor_gray` and `xnor_log` are supported, matching the SeqSNN-RPE reference variants).
 - `_init_weights` uses `trunc_normal_(std=0.02)` (same as QKFormer reference), unlike Spikformer/Spikingformer which use `normal_(std=0.02)`.
 - In `exp_ETT.py`, `d_model` is mapped from `args.alpha`; `pe_type` from `args.pe_type` (default `'conv'`); `attn_type` from `args.attn_type` (default `'standard'`); `blocks` must be set ≥ 3.
+
+---
+
+# TSLIFNode (Two-Compartment LIF Neuron)
+
+**Reference**: arXiv:2503.05108 (TS-LIF paper), `models/layers/tslif.py`
+
+TSLIFNode extends spikingjelly's `MemoryModule` with a dual-compartment membrane: v1 (dendritic / "long") and v2 (somatic / "short"). Both states are registered via `register_memory` so `functional.reset_net()` resets them cleanly.
+
+## Learnable Parameters
+
+| Parameter | Shape | Init | Role |
+|---|---|---|---|
+| `decay_factor` | `(4,)` | `[0.8, 0.2, 0.3, 0.7]` | `[d0, d1, d2, d3]` — decay & input weights for v1/v2 |
+| `kk` | `(1,)` | `0.8` | soma→dendrite cross-coupling |
+| `yy` | `(1,)` | `0.1` | dendrite→soma cross-coupling |
+| `alpha_s` | `(1,)` | `1.0` | mix weight for somatic spike s_s |
+| `alpha_l` | `(1,)` | `1.0` | mix weight for dendritic spike s_l |
+
+## Fixed Hyperparameters
+
+| Arg | Default | Role |
+|---|---|---|
+| `v_threshold` | `1.0` | Firing threshold θ (both compartments) |
+| `gamma` | `0.5` | Soft-reset coefficient for dendritic compartment |
+
+## Dynamics
+
+```
+v1_new = d0·v1 + d1·x − yy·v2        (dendritic update)
+v2_new = d2·v2 + d3·x − kk·v1        (somatic update)
+
+s_s = ATan(v2 − θ)                    (somatic spike)
+s_l = ATan(v1 − θ)                    (dendritic spike)
+
+spike = alpha_s·s_s + alpha_l·s_l     (learnable mixture)
+
+v1 −= gamma·s_l                       (soft dendritic reset)
+v2 −= θ·s_s                           (soft somatic reset)
+```
+
+## Notes
+
+- `alpha_s`/`alpha_l` are **scalar** (shape `(1,)`), unlike the reference which hardcoded `[1, 128]` or `[1, 168]`. This makes the node dataset-agnostic and broadcastable over any tensor shape.
+- State `v1`/`v2` is lazily initialised on first call and reset by `functional.reset_net()`.
+- Works on any input tensor shape — all dimensions are treated as batch.
+
+---
+
+# TSGRU Model Parameters
+
+**Reference**: arXiv:2503.05108, `models/TSGRU.py` (adaptation of `models/SpikGRU.py`)
+
+TSGRU replaces every spikingjelly LIFNode in SpikeGRU with TSLIFNode. Architecture and pipeline are otherwise identical to SpikeGRU.
+
+## Parameters
+
+| Arg | Maps from | Default | Description |
+|---|---|---|---|
+| `input_len` | `args.seq_len` | — | Input sequence length L |
+| `T` | `args.T` | — | Number of SNN time steps |
+| `blocks` | `args.layers` | — | Number of TSGRUCell layers |
+| `D` | `args.enc_in` | — | Number of input/output channels |
+| `pred_len` | `args.pred_len` | — | Prediction horizon |
+| `tau` | `args.tau` | — | Encoder LIF membrane time constant |
+| `hidden_dim` | `args.alpha` | — | Recurrent & decoder hidden size |
+| `encoder_type` | `args.encoder_type` | `'conv'` | `'conv'` or `'delta'` |
+| `pe_type` | `args.pe_type` | `'none'` | Positional encoding type |
+| `pe_mode` | `args.pe_mode` | `'add'` | `'add'` or `'concat'` |
+| `num_pe_neuron` | `args.num_pe_neuron` | `10` | PE neurons for neuron/random PE |
+| `neuron_pe_scale` | `args.neuron_pe_scale` | `1000.0` | Frequency scale for neuron PE |
+| `normalize` | — | `True` | RevIN-style instance normalization |
+
+## Architecture
+
+```
+(B, L, D)
+  → RevIN norm
+  → SpikeEncoder (conv or delta)     (T, B, D, L)
+  → transpose                        (T, B, L, D)
+  → [optional PE]
+  → Linear(D → hidden_dim) + TSLIFNode   (T, B, L, hidden_dim)
+  → TSGRUCell × blocks               (T, B, L, hidden_dim)   [T-step sequential loop]
+  → Linear(hidden_dim → D)           (T, B, L, D)
+  → BN + TSLIFNode
+  → permute → Linear(L → pred_len)   (T, B, D, pred_len)
+  → permute → mean(T)                (B, pred_len, D)
+  → denorm
+```
+
+### TSGRUCell
+
+```
+For t in 0..T-1:
+  r = ATan(W_ih[0]·x_t + W_hh[0]·h)      (reset gate)
+  z = ATan(W_ih[1]·x_t + W_hh[1]·h)      (update gate)
+  n = ATan(W_ih[2]·x_t + r·W_hh[2]·h)    (candidate)
+  h_new = (1−z)·n + z·h
+  h     = TSLIFNode(h_new)                 (hidden state quantized; state accumulates across steps)
+```
+
+## Notes
+
+- TSLIFNode replaces: `init_lif` (input projection gate), `SpikeGRUCell.lif` (hidden state quantiser), `out_lif` (output gate).
+- The hidden-state TSLIFNode's two-compartment memory (v1, v2) accumulates across the T-step sequential loop, giving richer temporal dynamics than a memoryless surrogate.
+- `functional.reset_net(self)` is called at the start of `forward()` to reset all TSLIFNode states between batches.
+
+---
+
+# TSTCN Model Parameters
+
+**Reference**: arXiv:2503.05108, `models/TSTCN.py` (adaptation of `models/SpikTCN.py`)
+
+TSTCN replaces every spikingjelly LIFNode in SpikeTCN with TSLIFNode. Dilated causal convolutions, weight-norm, SEW residual, and channel-independent pipeline are otherwise identical.
+
+## Parameters
+
+| Arg | Maps from | Default | Description |
+|---|---|---|---|
+| `input_len` | `args.seq_len` | — | Input sequence length L |
+| `T` | `args.T` | — | Number of SNN time steps |
+| `blocks` | `args.layers` | — | Number of TSTCNBlock layers |
+| `D` | `args.enc_in` | — | Number of input/output channels |
+| `pred_len` | `args.pred_len` | — | Prediction horizon |
+| `tau` | `args.tau` | — | Encoder LIF membrane time constant |
+| `hidden_dim` | `args.alpha` | — | TCN hidden channel size |
+| `kernel_size` | `args.kernel_size` | `3` | Dilated causal conv kernel size |
+| `encoder_type` | `args.encoder_type` | `'conv'` | `'conv'` or `'delta'` |
+| `pe_type` | `args.pe_type` | `'none'` | Positional encoding type |
+| `num_pe_neuron` | `args.num_pe_neuron` | `10` | PE neurons for neuron/random PE |
+| `neuron_pe_scale` | `args.neuron_pe_scale` | `1000.0` | Frequency scale for neuron PE |
+| `normalize` | — | `True` | RevIN-style instance normalization |
+
+## Architecture
+
+```
+(B, L, D)
+  → RevIN norm
+  → SpikeEncoder                     (T, B, D, L)
+  → [optional PE]
+  → flatten + unsqueeze              (T*B*D, 1, L)
+  → Conv1d(1 → hidden_dim)           (T*B*D, hidden_dim, L)
+  → TSTCNBlock × blocks              (T*B*D, hidden_dim, L)
+  → last causal position [:, :, -1]  (T*B*D, hidden_dim)
+  → Linear(hidden_dim → pred_len)    (T*B*D, pred_len)
+  → reshape → mean(T)                (B, pred_len, D)
+  → denorm
+```
+
+### TSTCNBlock (dilation = 2^i for block i)
+
+```
+x
+  → Conv1d(dilation=2^i) → Chomp1d → BN → TSLIFNode   (out)
+  → Conv1d(dilation=2^i) → Chomp1d → BN → TSLIFNode   (out)
+  → SEW residual: TSLIFNode(out + downsample(x))
+```
+
+## Notes
+
+- TSLIFNode replaces: `lif1`, `lif2`, `res_lif` in each TCN block.
+- In SpikeTCN the LIF was memoryless per call (step_mode='s'). With TSLIFNode, the two-compartment state (v1, v2) accumulates across sequential block calls within one forward pass — giving the TCN cross-block temporal memory.
+- Dilation doubles per block: block 0 → dilation 1, block 1 → dilation 2, block 2 → dilation 4, etc.
+- `functional.reset_net(self)` is called at the start of `forward()` to reset all TSLIFNode states between batches.
+
+---
+
+# TSFormer Model Parameters
+
+**Reference**: arXiv:2503.05108, `models/TSFormer.py` (adaptation of `models/iSpikformer.py`)
+
+TSFormer replaces every spikingjelly LIFNode in iSpikformer with TSLIFNode, and replaces every `Block` (SSA+MLP) with `TSBlock` (TSSSA+TSMLP). All other architectural choices (inverted iTransformer paradigm, channel tokens, h[-1] decoder) are identical to iSpikformer.
+
+## Parameters
+
+| Arg | Maps from | Default | Description |
+|---|---|---|---|
+| `input_len` | `args.seq_len` | — | Input sequence length L |
+| `T` | `args.T` | — | Number of SNN time steps |
+| `blocks` | `args.layers` | — | Number of TSBlock transformer layers |
+| `D` | `args.enc_in` | — | Number of input/output channels |
+| `pred_len` | `args.pred_len` | — | Prediction horizon |
+| `tau` | `args.tau` | — | Encoder LIF membrane time constant |
+| `d_model` | `args.alpha` | — | Per-channel embedding dimension |
+| `d_ff` | — | `d_model × 4` | Feedforward hidden size in TSMLP |
+| `heads` | `args.n_heads` | `8` | Attention heads in TSSSA |
+| `common_thr` | `args.common_thr` | `1.0` | Threshold forwarded to TSBlock |
+| `qk_scale` | — | `0.125` | Q·K scaling factor in TSSSA |
+| `encoder_type` | `args.encoder_type` | `'conv'` | `'conv'` or `'delta'` |
+| `normalize` | — | `True` | RevIN-style instance normalization |
+
+## Architecture
+
+```
+(B, L, D)
+  → RevIN norm
+  → SpikeEncoder                         (T, B, D, L)
+  → transpose                            (T, B, L, D)
+  → TSDataEmbeddingInverted              (T, B, D, d_model)
+      Linear(L → d_model) → BN → TSLIFNode
+  → TSBlock × blocks                     (T, B, D, d_model)
+      TSSSA (channel-wise spike attention) + TSMLP
+  → h[-1]  (last T step)                 (B, D, d_model)
+  → Linear(d_model → pred_len)           (B, D, pred_len)
+  → transpose                            (B, pred_len, D)
+  → denorm
+```
+
+### TSSSA (TS-LIF Spiking Self-Attention)
+
+```
+(T, B, L, D)   — L = D (channel tokens in inverted mode)
+  → Q path: Linear + BN + TSLIFNode → reshape (T,B,heads,L,D/heads)
+  → K path: Linear + BN + TSLIFNode → reshape (T,B,heads,L,D/heads)
+  → V path: Linear + BN + TSLIFNode → reshape (T,B,heads,L,D/heads)
+  → attn = TSLIFNode(Q·Kᵀ·scale, v_threshold=0.5)
+  → out  = attn·V → reshape → Linear + BN + TSLIFNode
+  → residual add
+```
+
+### TSMLP
+
+```
+(T, B, L, D)
+  → Linear(D → d_ff) + BN + TSLIFNode
+  → Linear(d_ff → D) + BN + TSLIFNode
+  → residual add
+```
+
+## Notes
+
+- TSLIFNode replaces all LIFNodes: embedding gate, Q/K/V projections, attention gate (v_threshold=0.5), output projection, MLP gates.
+- `attn_tslif` uses `v_threshold=0.5` (same as `attn_lif` in SSA/SpikingSSA) to allow more attention gates to fire on the scaled Q·K signal.
+- Decoder: takes `h[-1]` (last SNN time step), not a mean over T — same as iSpikformer.
+- `functional.reset_net(self)` is called at the start of `forward()` to reset all TSLIFNode states between batches.
+- `_init_weights` uses `normal_(std=0.02)` for Linear layers (same as iSpikformer).

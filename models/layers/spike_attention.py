@@ -1,10 +1,11 @@
 """
-Spiking Self-Attention (SSA) blocks — adapted from SeqSNN (Microsoft, MIT License).
+Spiking Self-Attention (SSA) blocks — adapted from SeqSNN (Microsoft, MIT License)
+and TS-LIF (arXiv:2503.05108).
 
 Copyright (c) Microsoft Corporation.
 https://github.com/microsoft/SeqSNN  (SeqSNN/module/spike_attention.py)
 
-Classes:
+Classes (spikingjelly LIFNode, step_mode='m'):
   SSA          — standard dot-product spiking attention (qk_scale fixed)
   SSA_XNOR     — XNOR spiking attention with learnable scale; supports three
                   positional-bias modes via attn_pe:
@@ -13,9 +14,14 @@ Classes:
                     'log'   — log-distance symmetric bias (scale init -4, no min-shift)
   MLP          — spiking two-layer MLP
   Block        — SSA + MLP residual block; accepts attn_cls kwarg to swap in SSA_XNOR
+  SpikingSSA, SpikingSSA_XNOR, SpikingMLP, SpikingBlock — pre-LIF Spikingformer blocks
 
-All neurons use spikingjelly activation_based API with step_mode='m'.
-Input/output tensors have shape (T, B, L, D).
+Classes (TSLIFNode, two-compartment dual-spike):
+  TSSSA        — SSA with TSLIFNode replacing all LIFNodes
+  TSMLP        — MLP with TSLIFNode replacing all LIFNodes
+  TSBlock      — TSSSA + TSMLP residual block
+
+All input/output tensors have shape (T, B, L, D).
 """
 
 import torch
@@ -25,6 +31,7 @@ from spikingjelly.activation_based import surrogate, neuron
 from models.layers.positional_encoding import (
     generate_gray_code_matrix, create_symmetric_matrix, CPGLinear,
 )
+from models.layers.tslif import TSLIFNode
 
 _DETACH = True
 _BACKEND = 'torch'
@@ -492,6 +499,128 @@ class SpikingBlock(nn.Module):
                              dim=dim, heads=heads, qk_scale=qk_scale, **attn_kwargs)
         self.mlp  = SpikingMLP(length=length, tau=tau, common_thr=common_thr,
                                in_features=dim, hidden_features=d_ff)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = x + self.attn(x)
+        x = x + self.mlp(x)
+        return x
+
+
+# ---------------------------------------------------------------------------
+# TS-LIF blocks  (two-compartment TSLIFNode replacing spikingjelly LIFNode)
+# Reference: arXiv:2503.05108 — TS-LIF/SeqSNN/module/spike_attention.py
+# ---------------------------------------------------------------------------
+
+class TSSSA(nn.Module):
+    """TS-LIF Spiking Self-Attention. Input/output: (T, B, L, D).
+
+    Identical structure to SSA but every LIFNode is replaced by TSLIFNode.
+    TSLIFNode processes the full (T, B, L, D) tensor in one call with
+    two-compartment dual-spike dynamics and learnable decay/coupling.
+    attn_tslif uses v_threshold=0.5 (same semantics as SSA's attn_lif).
+    """
+
+    def __init__(self, length, tau, common_thr, dim, heads=8, qk_scale=0.125):
+        super().__init__()
+        assert dim % heads == 0, f"dim {dim} must be divisible by heads {heads}"
+        self.heads = heads
+        self.qk_scale = qk_scale
+
+        self.q_m = nn.Linear(dim, dim)
+        self.q_bn = nn.BatchNorm1d(dim)
+        self.q_tslif = TSLIFNode()
+
+        self.k_m = nn.Linear(dim, dim)
+        self.k_bn = nn.BatchNorm1d(dim)
+        self.k_tslif = TSLIFNode()
+
+        self.v_m = nn.Linear(dim, dim)
+        self.v_bn = nn.BatchNorm1d(dim)
+        self.v_tslif = TSLIFNode()
+
+        self.attn_tslif = TSLIFNode(v_threshold=0.5)
+
+        self.last_m  = nn.Linear(dim, dim)
+        self.last_bn = nn.BatchNorm1d(dim)
+        self.last_tslif = TSLIFNode()
+
+    def _proj(self, lin, bn, tslif, tb, T, B, L, D):
+        out = lin(tb)
+        out = bn(out.transpose(-1, -2)).transpose(-1, -2).reshape(T, B, L, D).contiguous()
+        return tslif(out)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        T, B, L, D = x.shape
+        tb = x.flatten(0, 1)                                        # (TB, L, D)
+
+        q = self._proj(self.q_m, self.q_bn, self.q_tslif, tb, T, B, L, D)
+        k = self._proj(self.k_m, self.k_bn, self.k_tslif, tb, T, B, L, D)
+        v = self._proj(self.v_m, self.v_bn, self.v_tslif, tb, T, B, L, D)
+
+        head_dim = D // self.heads
+        q = q.reshape(T, B, L, self.heads, head_dim).permute(0, 1, 3, 2, 4).contiguous()
+        k = k.reshape(T, B, L, self.heads, head_dim).permute(0, 1, 3, 2, 4).contiguous()
+        v = v.reshape(T, B, L, self.heads, head_dim).permute(0, 1, 3, 2, 4).contiguous()
+
+        attn = (q @ k.transpose(-2, -1)) * self.qk_scale            # (T,B,H,L,L)
+        x = (attn @ v).transpose(2, 3).reshape(T, B, L, D).contiguous()
+        x = self.attn_tslif(x)
+
+        x = x.flatten(0, 1)
+        x = self.last_m(x)
+        x = self.last_bn(x.transpose(-1, -2)).transpose(-1, -2)
+        x = self.last_tslif(x.reshape(T, B, L, D).contiguous())
+        return x
+
+
+class TSMLP(nn.Module):
+    """TS-LIF MLP. Input/output: (T, B, L, D).
+
+    Identical structure to MLP but every LIFNode is replaced by TSLIFNode.
+    """
+
+    def __init__(self, length, tau, common_thr, in_features, hidden_features,
+                 out_features=None):
+        super().__init__()
+        out_features = out_features or in_features
+        self.hidden_features = hidden_features
+        self.out_features = out_features
+
+        self.fc1    = nn.Linear(in_features, hidden_features)
+        self.bn1    = nn.BatchNorm1d(hidden_features)
+        self.tslif1 = TSLIFNode()
+
+        self.fc2    = nn.Linear(hidden_features, out_features)
+        self.bn2    = nn.BatchNorm1d(out_features)
+        self.tslif2 = TSLIFNode()
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        T, B, L, D = x.shape
+        x = x.flatten(0, 1)
+        x = self.fc1(x)
+        x = (self.bn1(x.transpose(-1, -2)).transpose(-1, -2)
+             .reshape(T, B, L, self.hidden_features).contiguous())
+        x = self.tslif1(x)
+        x = x.flatten(0, 1)
+        x = self.fc2(x)
+        x = (self.bn2(x.transpose(-1, -2)).transpose(-1, -2)
+             .reshape(T, B, L, self.out_features).contiguous())
+        return self.tslif2(x)
+
+
+class TSBlock(nn.Module):
+    """TSSSA + TSMLP residual block. Input/output: (T, B, L, D).
+
+    TS-LIF drop-in replacement for Block: uses two-compartment dual-spike
+    TSLIFNode in both attention and MLP sub-layers.
+    """
+
+    def __init__(self, length, tau, common_thr, dim, d_ff, heads=8, qk_scale=0.125):
+        super().__init__()
+        self.attn = TSSSA(length=length, tau=tau, common_thr=common_thr,
+                          dim=dim, heads=heads, qk_scale=qk_scale)
+        self.mlp  = TSMLP(length=length, tau=tau, common_thr=common_thr,
+                          in_features=dim, hidden_features=d_ff)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = x + self.attn(x)

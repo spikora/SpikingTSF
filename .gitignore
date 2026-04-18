@@ -203,6 +203,7 @@ cython_debug/
 SeqSNN/ # remove later
 SeqSNN-RPE/ # remove later
 SpikF/ # remove later
+TS-LIF/ # remove later
 .cursorignore
 .cursorindexingignore
 
