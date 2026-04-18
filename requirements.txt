@@ -2,6 +2,7 @@ torch>=1.13.0
 torchvision
 numpy
 pandas
+tables
 scikit-learn
 scipy
 matplotlib

@@ -1,0 +1,80 @@
+
+============================================================
+  Run 1/3  |  seed=42
+============================================================
+Model: SpikF | Parameters: 1,185,767
+test 2785
+>>>>>>>  training : SpikF_ETTh1_M_sl96_pl96_T16_lv1_a2_lr0.0005_bs32_optAdam_wd0.0_schcosine_seed42  >>>>>>>>>>>>>>>
+train 8449
+val 2785
+test 2785
+exp/run_ETT/SpikF_ETTh1_M_sl96_pl96_T16_lv1_a2_lr0.0005_bs32_optAdam_wd0.0_schcosine_seed42
+	iters: 100, epoch: 1 | loss: 0.4466064
+	speed: 0.1586s/iter; left time: 193.6s
+	iters: 200, epoch: 1 | loss: 0.4162181
+	speed: 0.1397s/iter; left time: 156.6s
+Epoch: 1 cost time: 38.1s
+  [valid] mse: 0.702621 | mae: 0.553641
+  [test] mse: 0.385487 | mae: 0.398250
+Epoch 1 | Train: 0.4266720 | Valid: 0.5536405 | Test: 0.3982502
+Validation loss decreased (inf --> 0.553641).  Saving model ...
+	iters: 100, epoch: 2 | loss: 0.4029387
+	speed: 1.5435s/iter; left time: 1477.1s
+	iters: 200, epoch: 2 | loss: 0.4080879
+	speed: 0.1377s/iter; left time: 118.0s
+Epoch: 2 cost time: 36.8s
+  [valid] mse: 0.692108 | mae: 0.548552
+  [test] mse: 0.382193 | mae: 0.394763
+Epoch 2 | Train: 0.4047572 | Valid: 0.5485517 | Test: 0.3947626
+Validation loss decreased (0.553641 --> 0.548552).  Saving model ...
+	iters: 100, epoch: 3 | loss: 0.3979316
+	speed: 1.5457s/iter; left time: 1071.2s
+	iters: 200, epoch: 3 | loss: 0.3992386
+	speed: 0.1379s/iter; left time: 81.8s
+Epoch: 3 cost time: 37.1s
+  [valid] mse: 0.691621 | mae: 0.548059
+  [test] mse: 0.375341 | mae: 0.388925
+Epoch 3 | Train: 0.3972353 | Valid: 0.5480587 | Test: 0.3889250
+Validation loss decreased (0.548552 --> 0.548059).  Saving model ...
+	iters: 100, epoch: 4 | loss: 0.3908539
+	speed: 1.5433s/iter; left time: 662.1s
+	iters: 200, epoch: 4 | loss: 0.3903198
+	speed: 0.1418s/iter; left time: 46.6s
+Epoch: 4 cost time: 37.3s
+  [valid] mse: 0.683761 | mae: 0.543848
+  [test] mse: 0.380051 | mae: 0.389574
+Epoch 4 | Train: 0.3913686 | Valid: 0.5438484 | Test: 0.3895735
+Validation loss decreased (0.548059 --> 0.543848).  Saving model ...
+	iters: 100, epoch: 5 | loss: 0.3854163
+	speed: 1.5967s/iter; left time: 263.5s
+	iters: 200, epoch: 5 | loss: 0.3874710
+	speed: 0.1404s/iter; left time: 9.1s
+Epoch: 5 cost time: 40.4s
+  [valid] mse: 0.692141 | mae: 0.547416
+  [test] mse: 0.378727 | mae: 0.389551
+Epoch 5 | Train: 0.3867731 | Valid: 0.5474156 | Test: 0.3895511
+EarlyStopping counter: 1 out of 3
+>>>>>>>  testing  : SpikF_ETTh1_M_sl96_pl96_T16_lv1_a2_lr0.0005_bs32_optAdam_wd0.0_schcosine_seed42  <<<<<<<<<<<<<<<
+(2785, 96, 7)
+|  Normed  | mse: 0.3800514 | mae: 0.3895737 | rmse: 0.6164831 | rse: 0.7105983 | r2: 0.4546719 | mape: 9.1230450 | mspe: 39777.8593750 | corr: 26.4876556 |
+
+Run 1 results:
+  MAE=0.3896  MSE=0.3801  RMSE=0.6165
+  RSE=0.7106  R²=0.4547
+  MAPE=9.1230  MSPE=39777.8594  CORR=26.4877
+
+============================================================
+  Run 2/3  |  seed=1234
+============================================================
+Model: SpikF | Parameters: 1,185,767
+test 2785
+>>>>>>>  training : SpikF_ETTh1_M_sl96_pl96_T16_lv1_a2_lr0.0005_bs32_optAdam_wd0.0_schcosine_seed1234  >>>>>>>>>>>>>>>
+train 8449
+val 2785
+test 2785
+exp/run_ETT/SpikF_ETTh1_M_sl96_pl96_T16_lv1_a2_lr0.0005_bs32_optAdam_wd0.0_schcosine_seed1234
+	iters: 100, epoch: 1 | loss: 0.4452193
+	speed: 1.2499s/iter; left time: 1526.2s
+	iters: 200, epoch: 1 | loss: 0.4146073
+	speed: 1.2875s/iter; left time: 1443.2s
+Epoch: 1 cost time: 339.9s

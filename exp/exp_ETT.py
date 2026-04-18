@@ -17,7 +17,6 @@ from models.SpikGRU import SpikeGRU
 from models.TSGRU import TSGRU
 from models.TSTCN import TSTCN
 from models.TSFormer import TSFormer
-from models.TSLIF import Model as TSLIF
 
 # --- SNN models (spikingjelly activation_based backend, adapted from SeqSNN) ---
 from models.Spikformer import Spikformer
@@ -53,14 +52,22 @@ from torch.optim.lr_scheduler import CosineAnnealingLR, StepLR
 
 # Models that use the Model(configs) convention — enc_in injected before init
 _NEW_STYLE_MODELS = {
-    'TSLIF', 'DLinear', 'ITransformer',
+    'DLinear', 'ITransformer',
 }
 
 # Models that are pure ANN (no spikingjelly reset needed)
 _ANN_MODELS = {'DLinear', 'ITransformer'}
 
+# clock_driven neurons (reset via cd_functional only)
+_CD_MODELS = {'SpikF', 'SpikeRNN', 'SpikTCN', 'SpikGRU'}
+
+# activation_based neurons (reset via ab_functional only);
+# these models also call reset_net(self) inside their own forward(),
+# but we reset externally here too for safety.
+_AB_MODELS = {'iSpikformer', 'Spikformer', 'Spikingformer', 'QKFormer',
+              'TSGRU', 'TSTCN', 'TSFormer'}
+
 _NEW_STYLE_CLASS = {
-    'TSLIF': TSLIF,
     'DLinear': DLinear,
     'ITransformer': ITransformer,
 }
@@ -273,12 +280,11 @@ class Exp_ETT(Exp_Basic):
                 encoder_type=self.args.encoder_type,
             )
         else:
-            # Default: SpikF — uses alpha as a float multiplier
+            # Default: SpikF
             model = SpikF(
                 self.args.seq_len, self.args.patch_num, self.args.patch_dim,
                 self.args.T, self.args.levels, self.input_dim,
-                self.args.pred_len, self.args.tau, self.args.alpha,
-                self.args.hidden_dim,
+                self.args.pred_len, self.args.tau, self.args.hidden_dim,
             )
 
         total_params = sum(p.numel() for p in model.parameters())
@@ -508,14 +514,12 @@ class Exp_ETT(Exp_Basic):
         batch_x = batch_x.float().to(self.args.rank)
         batch_y = batch_y.float()
 
-        # Reset SNN state before each forward pass.
-        # cd_functional covers clock_driven neurons (SpikF, TSLIF, etc.)
-        # ab_functional covers activation_based neurons (Spikformer, Spikingformer,
-        # and TS-LIF models which call reset_net internally but we call here too).
-        if self.args.model not in _ANN_MODELS:
+        # Reset SNN state before each forward pass using only the correct API
+        # for each neuron family, to avoid cross-family warnings.
+        if self.args.model in _CD_MODELS:
             cd_functional.reset_net(self.model)
-            if _HAS_AB:
-                ab_functional.reset_net(self.model)
+        elif self.args.model in _AB_MODELS and _HAS_AB:
+            ab_functional.reset_net(self.model)
 
         outputs = self.model(batch_x)
 

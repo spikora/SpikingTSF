@@ -2,8 +2,20 @@ from exp.exp_ETT import Exp_ETT
 import argparse
 import numpy as np
 import torch
+import yaml
+
+# Pre-parse --config only, so we can set YAML values as argparse defaults
+# before the full parse runs.  CLI flags still override YAML.
+_pre = argparse.ArgumentParser(add_help=False)
+_pre.add_argument('--config', type=str, default=None)
+_pre_args, _ = _pre.parse_known_args()
 
 parser = argparse.ArgumentParser(description='SpikingTSF — long-term forecasting')
+
+# Config file (YAML).  All keys are treated as parser defaults; explicit CLI
+# flags always win.
+parser.add_argument('--config', type=str, default=None,
+                    help='path to YAML config (e.g. configs/SpikF/ETTh1.yaml)')
 
 # ── Model ──────────────────────────────────────────────────────────────────
 parser.add_argument('--model', type=str, default='SpikF',
@@ -15,8 +27,6 @@ parser.add_argument('--model', type=str, default='SpikF',
                         'Spikformer', 'Spikingformer', 'QKFormer',
                         # Clock-driven SNN model
                         'SpikF',
-                        # TSLIF single-compartment (new-style Model(args))
-                        'TSLIF',
                         # ANN baselines
                         'DLinear', 'ITransformer',
                     ],
@@ -56,9 +66,9 @@ parser.add_argument('--alpha', type=float, default=256.0,
                          'hidden_dim (RNN/TCN); integer for most models, '
                          'float multiplier for SpikF')
 parser.add_argument('--patch_num', type=int, default=48,
-                    help='number of patches (SpikF / TSLIF)')
+                    help='number of patches (SpikF)')
 parser.add_argument('--patch_dim', type=int, default=32,
-                    help='patch embedding dim (SpikF / TSLIF)')
+                    help='patch embedding dim (SpikF)')
 parser.add_argument('--hidden_dim', type=int, default=720,
                     help='dense/decoder hidden size (SpikF)')
 
@@ -102,12 +112,12 @@ parser.add_argument('--moving_avg', type=int, default=25,
                     help='trend decomposition kernel size (DLinear)')
 parser.add_argument('--individual', action='store_true', default=False,
                     help='per-variate independent linear layers (DLinear)')
-# ITransformer / TSLIF new-style config passthrough
+# ITransformer new-style config passthrough
 parser.add_argument('--d_model', type=int, default=256,
                     help='model embedding dim for new-style Model(args) models '
-                         '(ITransformer, TSLIF)')
+                         '(ITransformer)')
 parser.add_argument('--e_layers', type=int, default=2,
-                    help='encoder layers (ITransformer / TSLIF new-style)')
+                    help='encoder layers (ITransformer new-style)')
 parser.add_argument('--d_layers', type=int, default=1,
                     help='decoder layers (new-style models)')
 parser.add_argument('--factor', type=int, default=1,
@@ -153,6 +163,12 @@ parser.add_argument('--save', type=int, default=0,
 
 # ── Hardware ───────────────────────────────────────────────────────────────
 parser.add_argument('--gpu', type=int, default=0, help='CUDA device index')
+
+# Load YAML config and use as defaults (CLI args still override)
+if _pre_args.config is not None:
+    with open(_pre_args.config) as _f:
+        _cfg = yaml.safe_load(_f)
+    parser.set_defaults(**_cfg)
 
 args = parser.parse_args()
 args.rank = args.gpu   # alias used internally by Exp_Basic / exp_ETT

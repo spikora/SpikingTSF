@@ -1,28 +1,21 @@
 #!/bin/bash
-for seed in 0 42 79
-do
-    for seq_len in 96
-    do
-        for pred_len in 96 192 336 720
-        do
-            echo ETTh1_${seq_len}-${pred_len}_seed${seed}
-            python run_long.py \
-                --data ETTh1 \
-                --data_path ETTh1.csv \
-                --features M \
-                --seq_len ${seq_len} \
-                --pred_len ${pred_len} \
-                --batch_size 32 \
-                --lr 5e-4 \
-                --levels 1 \
-                --patch_dim 32 \
-                --T 16 \
-                --hidden_dim 720 \
-                --train_epochs 5 \
-                --patience 3 \
-                --model_name SpikF_ETTh1_input${seq_len}_output${pred_len} \
-                --model SpikF \
-                | tee "Output/ETTh1/SpikF/${seq_len}-${pred_len}-seed${seed}.txt"
-        done
-    done
+
+export CUDA_VISIBLE_DEVICES=0
+
+set -euo pipefail
+
+CONFIG="${CONFIG:-configs/SpikF/ETTh1.yaml}"
+GPU="${GPU:-0}"
+PRED_LENS=(${PRED_LENS:-96 192 336 720})
+
+OUT_DIR="${OUT_DIR:-Output/ETTh1/SpikF}"
+mkdir -p "${OUT_DIR}"
+
+for pred_len in "${PRED_LENS[@]}"; do
+    echo "ETTh1 pl=${pred_len}"
+    python run_long.py \
+        --config "${CONFIG}" \
+        --pred_len "${pred_len}" \
+        --gpu "${GPU}" \
+        | tee "${OUT_DIR}/pl${pred_len}.txt"
 done

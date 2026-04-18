@@ -138,6 +138,7 @@ celerybeat.pid
 .env
 .envrc
 .venv
+compr/
 env/
 venv/
 ENV/
@@ -204,10 +205,18 @@ SeqSNN/ # remove later
 SeqSNN-RPE/ # remove later
 SpikF/ # remove later
 TS-LIF/ # remove later
+dataset/ # remove later
+datasets/ # remove later
+Output/ # remove later
+scripts/Output  # remove later
+test_results/ # remove later
 old_repositories/ # remove later
 .codex
 .cursorignore
 .cursorindexingignore
+__pycache__/
+*.pyc
+
 
 # Marimo
 marimo/_static/

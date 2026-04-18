@@ -1,0 +1,11 @@
+
+============================================================
+  Run 1/3  |  seed=42
+============================================================
+Model: SpikF | Parameters: 1,185,767
+test 2785
+>>>>>>>  training : SpikF_ETTh2_M_sl96_pl96_T16_lv1_a2_lr0.0005_bs32_optAdam_wd0.0_schcosine_seed42  >>>>>>>>>>>>>>>
+train 8449
+val 2785
+test 2785
+exp/run_ETT/SpikF_ETTh2_M_sl96_pl96_T16_lv1_a2_lr0.0005_bs32_optAdam_wd0.0_schcosine_seed42

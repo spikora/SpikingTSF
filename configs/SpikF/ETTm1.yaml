@@ -1,0 +1,34 @@
+# SpikF — ETTm1 configuration
+model: SpikF
+data: ETTm1
+data_path: ETTm1.csv
+features: M
+target: OT
+root_path: ./datasets/long/
+checkpoints: exp/run_ETT/
+
+seq_len: 96
+label_len: 48
+
+T: 16
+tau: 2.0
+alpha: 2.0
+
+levels: 1
+patch_num: 48
+patch_dim: 32
+hidden_dim: 720
+
+batch_size: 32
+lr: 5.0e-4
+train_epochs: 10
+patience: 1
+loss: mae
+optimizer: Adam
+scheduler: cosine
+scheduler_T_max: 20
+
+itr: 3
+num_workers: 1
+save: 0
+gpu: 0
