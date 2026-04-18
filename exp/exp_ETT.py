@@ -28,7 +28,7 @@ from models.QKFormer import QKFormer
 from models.DLinear import Model as DLinear
 from models.ITransformer import Model as ITransformer
 
-from utils.metrics import metric, metric_
+from utils.metrics import metric, metric_, metric_full
 from utils.tools import EarlyStopping
 warnings.filterwarnings('ignore')
 from data_provider.ETT_data_loader import (
@@ -48,7 +48,7 @@ except ImportError:
     _HAS_AB = False
 
 torch.autograd.set_detect_anomaly(True)
-from torch.optim.lr_scheduler import CosineAnnealingLR
+from torch.optim.lr_scheduler import CosineAnnealingLR, StepLR
 
 
 # Models that use the Model(configs) convention — enc_in injected before init
@@ -100,6 +100,10 @@ class Exp_ETT(Exp_Basic):
 
         name = self.args.model
 
+        # alpha is the main capacity knob: integer dimension for most models,
+        # float multiplier for SpikF. Cast here for all dimension uses.
+        alpha_dim = int(self.args.alpha)
+
         if name in _NEW_STYLE_MODELS:
             model = _NEW_STYLE_CLASS[name](self.args)
 
@@ -111,12 +115,12 @@ class Exp_ETT(Exp_Basic):
                 D=self.input_dim,
                 pred_len=self.args.pred_len,
                 tau=self.args.tau,
-                d_model=self.args.alpha,
+                d_model=alpha_dim,
                 d_ff=getattr(self.args, 'd_ff', None),
-                heads=getattr(self.args, 'heads', 8),
-                common_thr=getattr(self.args, 'common_thr', 1.0),
-                qk_scale=getattr(self.args, 'qk_scale', 0.125),
-                encoder_type=getattr(self.args, 'encoder_type', 'conv'),
+                heads=self.args.n_heads,
+                common_thr=self.args.common_thr,
+                qk_scale=self.args.qk_scale,
+                encoder_type=self.args.encoder_type,
             )
         elif name == 'SpikeRNN':
             model = SpikeRNN(
@@ -126,14 +130,14 @@ class Exp_ETT(Exp_Basic):
                 D=self.input_dim,
                 pred_len=self.args.pred_len,
                 tau=self.args.tau,
-                hidden_dim=self.args.alpha,
-                encoder_type=getattr(self.args, 'encoder_type', 'conv'),
-                pe_type=getattr(self.args, 'pe_type', 'none'),
-                pe_mode=getattr(self.args, 'pe_mode', 'add'),
-                num_pe_neuron=getattr(self.args, 'num_pe_neuron', 10),
-                neuron_pe_scale=getattr(self.args, 'neuron_pe_scale', 1000.0),
+                hidden_dim=alpha_dim,
+                encoder_type=self.args.encoder_type,
+                pe_type=self.args.pe_type,
+                pe_mode=self.args.pe_mode,
+                num_pe_neuron=self.args.num_pe_neuron,
+                neuron_pe_scale=self.args.neuron_pe_scale,
             )
-        elif name == 'SpikeTCN':
+        elif name == 'SpikTCN':
             model = SpikeTCN(
                 input_len=self.args.seq_len,
                 T=self.args.T,
@@ -141,14 +145,14 @@ class Exp_ETT(Exp_Basic):
                 D=self.input_dim,
                 pred_len=self.args.pred_len,
                 tau=self.args.tau,
-                hidden_dim=self.args.alpha,
-                kernel_size=getattr(self.args, 'kernel_size', 3),
-                encoder_type=getattr(self.args, 'encoder_type', 'conv'),
-                pe_type=getattr(self.args, 'pe_type', 'none'),
-                num_pe_neuron=getattr(self.args, 'num_pe_neuron', 10),
-                neuron_pe_scale=getattr(self.args, 'neuron_pe_scale', 1000.0),
+                hidden_dim=alpha_dim,
+                kernel_size=self.args.kernel_size,
+                encoder_type=self.args.encoder_type,
+                pe_type=self.args.pe_type,
+                num_pe_neuron=self.args.num_pe_neuron,
+                neuron_pe_scale=self.args.neuron_pe_scale,
             )
-        elif name == 'SpikeGRU':
+        elif name == 'SpikGRU':
             model = SpikeGRU(
                 input_len=self.args.seq_len,
                 T=self.args.T,
@@ -156,12 +160,12 @@ class Exp_ETT(Exp_Basic):
                 D=self.input_dim,
                 pred_len=self.args.pred_len,
                 tau=self.args.tau,
-                hidden_dim=self.args.alpha,
-                encoder_type=getattr(self.args, 'encoder_type', 'conv'),
-                pe_type=getattr(self.args, 'pe_type', 'none'),
-                pe_mode=getattr(self.args, 'pe_mode', 'add'),
-                num_pe_neuron=getattr(self.args, 'num_pe_neuron', 10),
-                neuron_pe_scale=getattr(self.args, 'neuron_pe_scale', 1000.0),
+                hidden_dim=alpha_dim,
+                encoder_type=self.args.encoder_type,
+                pe_type=self.args.pe_type,
+                pe_mode=self.args.pe_mode,
+                num_pe_neuron=self.args.num_pe_neuron,
+                neuron_pe_scale=self.args.neuron_pe_scale,
             )
         elif name == 'Spikformer':
             model = Spikformer(
@@ -171,19 +175,19 @@ class Exp_ETT(Exp_Basic):
                 D=self.input_dim,
                 pred_len=self.args.pred_len,
                 tau=self.args.tau,
-                d_model=self.args.alpha,
+                d_model=alpha_dim,
                 d_ff=getattr(self.args, 'd_ff', None),
-                heads=getattr(self.args, 'heads', 8),
-                common_thr=getattr(self.args, 'common_thr', 1.0),
-                qk_scale=getattr(self.args, 'qk_scale', 0.125),
-                encoder_type=getattr(self.args, 'encoder_type', 'conv'),
-                pe_type=getattr(self.args, 'pe_type', 'none'),
-                pe_mode=getattr(self.args, 'pe_mode', 'add'),
-                attn_type=getattr(self.args, 'attn_type', 'standard'),
-                gray_bits=getattr(self.args, 'gray_bits', 10),
-                num_pe_neuron=getattr(self.args, 'num_pe_neuron', 10),
-                neuron_pe_scale=getattr(self.args, 'neuron_pe_scale', 1000.0),
-                dropout=getattr(self.args, 'dropout', 0.1),
+                heads=self.args.n_heads,
+                common_thr=self.args.common_thr,
+                qk_scale=self.args.qk_scale,
+                encoder_type=self.args.encoder_type,
+                pe_type=self.args.pe_type,
+                pe_mode=self.args.pe_mode,
+                attn_type=self.args.attn_type,
+                gray_bits=self.args.gray_bits,
+                num_pe_neuron=self.args.num_pe_neuron,
+                neuron_pe_scale=self.args.neuron_pe_scale,
+                dropout=self.args.dropout,
             )
         elif name == 'Spikingformer':
             model = Spikingformer(
@@ -193,16 +197,16 @@ class Exp_ETT(Exp_Basic):
                 D=self.input_dim,
                 pred_len=self.args.pred_len,
                 tau=self.args.tau,
-                d_model=self.args.alpha,
+                d_model=alpha_dim,
                 d_ff=getattr(self.args, 'd_ff', None),
-                heads=getattr(self.args, 'heads', 8),
-                common_thr=getattr(self.args, 'common_thr', 1.0),
-                qk_scale=getattr(self.args, 'qk_scale', 0.125),
-                encoder_type=getattr(self.args, 'encoder_type', 'conv'),
-                pe_type=getattr(self.args, 'pe_type', 'conv'),
-                attn_type=getattr(self.args, 'attn_type', 'standard'),
-                gray_bits=getattr(self.args, 'gray_bits', 10),
-                dropout=getattr(self.args, 'dropout', 0.1),
+                heads=self.args.n_heads,
+                common_thr=self.args.common_thr,
+                qk_scale=self.args.qk_scale,
+                encoder_type=self.args.encoder_type,
+                pe_type=self.args.pe_type,
+                attn_type=self.args.attn_type,
+                gray_bits=self.args.gray_bits,
+                dropout=self.args.dropout,
             )
         elif name == 'QKFormer':
             model = QKFormer(
@@ -212,16 +216,16 @@ class Exp_ETT(Exp_Basic):
                 D=self.input_dim,
                 pred_len=self.args.pred_len,
                 tau=self.args.tau,
-                d_model=self.args.alpha,
+                d_model=alpha_dim,
                 d_ff=getattr(self.args, 'd_ff', None),
-                heads=getattr(self.args, 'heads', 8),
-                common_thr=getattr(self.args, 'common_thr', 1.0),
-                qk_scale=getattr(self.args, 'qk_scale', 0.125),
-                encoder_type=getattr(self.args, 'encoder_type', 'conv'),
-                pe_type=getattr(self.args, 'pe_type', 'conv'),
-                attn_type=getattr(self.args, 'attn_type', 'standard'),
-                gray_bits=getattr(self.args, 'gray_bits', 10),
-                dropout=getattr(self.args, 'dropout', 0.1),
+                heads=self.args.n_heads,
+                common_thr=self.args.common_thr,
+                qk_scale=self.args.qk_scale,
+                encoder_type=self.args.encoder_type,
+                pe_type=self.args.pe_type,
+                attn_type=self.args.attn_type,
+                gray_bits=self.args.gray_bits,
+                dropout=self.args.dropout,
             )
         elif name == 'TSGRU':
             model = TSGRU(
@@ -231,12 +235,12 @@ class Exp_ETT(Exp_Basic):
                 D=self.input_dim,
                 pred_len=self.args.pred_len,
                 tau=self.args.tau,
-                hidden_dim=self.args.alpha,
-                encoder_type=getattr(self.args, 'encoder_type', 'conv'),
-                pe_type=getattr(self.args, 'pe_type', 'none'),
-                pe_mode=getattr(self.args, 'pe_mode', 'add'),
-                num_pe_neuron=getattr(self.args, 'num_pe_neuron', 10),
-                neuron_pe_scale=getattr(self.args, 'neuron_pe_scale', 1000.0),
+                hidden_dim=alpha_dim,
+                encoder_type=self.args.encoder_type,
+                pe_type=self.args.pe_type,
+                pe_mode=self.args.pe_mode,
+                num_pe_neuron=self.args.num_pe_neuron,
+                neuron_pe_scale=self.args.neuron_pe_scale,
             )
         elif name == 'TSTCN':
             model = TSTCN(
@@ -246,12 +250,12 @@ class Exp_ETT(Exp_Basic):
                 D=self.input_dim,
                 pred_len=self.args.pred_len,
                 tau=self.args.tau,
-                hidden_dim=self.args.alpha,
-                kernel_size=getattr(self.args, 'kernel_size', 3),
-                encoder_type=getattr(self.args, 'encoder_type', 'conv'),
-                pe_type=getattr(self.args, 'pe_type', 'none'),
-                num_pe_neuron=getattr(self.args, 'num_pe_neuron', 10),
-                neuron_pe_scale=getattr(self.args, 'neuron_pe_scale', 1000.0),
+                hidden_dim=alpha_dim,
+                kernel_size=self.args.kernel_size,
+                encoder_type=self.args.encoder_type,
+                pe_type=self.args.pe_type,
+                num_pe_neuron=self.args.num_pe_neuron,
+                neuron_pe_scale=self.args.neuron_pe_scale,
             )
         elif name == 'TSFormer':
             model = TSFormer(
@@ -261,15 +265,15 @@ class Exp_ETT(Exp_Basic):
                 D=self.input_dim,
                 pred_len=self.args.pred_len,
                 tau=self.args.tau,
-                d_model=self.args.alpha,
+                d_model=alpha_dim,
                 d_ff=getattr(self.args, 'd_ff', None),
-                heads=getattr(self.args, 'heads', 8),
-                common_thr=getattr(self.args, 'common_thr', 1.0),
-                qk_scale=getattr(self.args, 'qk_scale', 0.125),
-                encoder_type=getattr(self.args, 'encoder_type', 'conv'),
+                heads=self.args.n_heads,
+                common_thr=self.args.common_thr,
+                qk_scale=self.args.qk_scale,
+                encoder_type=self.args.encoder_type,
             )
         else:
-            # Default: SpikF
+            # Default: SpikF — uses alpha as a float multiplier
             model = SpikF(
                 self.args.seq_len, self.args.patch_num, self.args.patch_dim,
                 self.args.T, self.args.levels, self.input_dim,
@@ -314,8 +318,6 @@ class Exp_ETT(Exp_Basic):
         else:
             shuffle_flag, drop_last, batch_size = True, True, args.batch_size
 
-        # Dataset_H5 and Dataset_TXT don't use cols/target in the same way —
-        # pass them as kwargs but the classes will ignore unsupported ones safely.
         data_set = Data(
             root_path=args.root_path,
             data_path=args.data_path,
@@ -336,10 +338,37 @@ class Exp_ETT(Exp_Basic):
         return data_loader
 
     def _select_optimizer(self):
-        return optim.Adam(self.model.parameters(), lr=self.args.lr, betas=(0.9, 0.999))
+        """Build optimizer from args.optimizer / args.lr / args.weight_decay.
+
+        Supports: Adam, AdamW, SGD, RMSprop.  Adam and AdamW use betas=(0.9,0.999).
+        SGD uses momentum=0.9.  All respect args.weight_decay.
+        """
+        opt_cls = getattr(optim, self.args.optimizer)
+        wd = getattr(self.args, 'weight_decay', 0.0)
+        lr = self.args.lr
+        params = self.model.parameters()
+
+        if self.args.optimizer in ('Adam', 'AdamW'):
+            return opt_cls(params, lr=lr, betas=(0.9, 0.999), weight_decay=wd)
+        elif self.args.optimizer == 'SGD':
+            return opt_cls(params, lr=lr, momentum=0.9, weight_decay=wd)
+        else:  # RMSprop and anything else
+            return opt_cls(params, lr=lr, weight_decay=wd)
 
     def _select_criterion(self, losstype):
         return nn.L1Loss() if losstype == 'mae' else nn.MSELoss()
+
+    def _build_scheduler(self, optimizer):
+        sched = getattr(self.args, 'scheduler', 'cosine')
+        if sched == 'cosine':
+            T_max = getattr(self.args, 'scheduler_T_max', 20)
+            return CosineAnnealingLR(optimizer, T_max=T_max)
+        elif sched == 'step':
+            step_size = getattr(self.args, 'scheduler_step', 1)
+            gamma = getattr(self.args, 'scheduler_gamma', 0.5)
+            return StepLR(optimizer, step_size=step_size, gamma=gamma)
+        else:  # 'none'
+            return None
 
     def train(self, setting):
         torch.cuda.empty_cache()
@@ -355,8 +384,9 @@ class Exp_ETT(Exp_Basic):
         train_steps = len(train_loader)
         early_stopping = EarlyStopping(patience=self.args.patience, verbose=True, delta=0.0002)
         model_optim = self._select_optimizer()
-        scheduler = CosineAnnealingLR(model_optim, T_max=20)
+        scheduler = self._build_scheduler(model_optim)
         criterion = self._select_criterion(self.args.loss)
+        grad_clip = getattr(self.args, 'grad_clip', 0.0)
 
         for epoch in range(self.args.train_epochs):
             iter_count = 0
@@ -370,9 +400,12 @@ class Exp_ETT(Exp_Basic):
 
                 pred, true = self._process_one_batch(batch_x, batch_y)
 
-                if len(pred.shape) == 4:
-                    # SpikF returns (T, B, pred_len, D) — average over T before loss
-                    pred = pred.mean(dim=0)
+                # SpikF returns (T, B, pred_len, D): compute loss over all T steps
+                # for a richer gradient signal. true is tiled to match pred shape.
+                # All other models return (B, pred_len, D) — no special handling needed.
+                if pred.dim() == 4:
+                    true = true.unsqueeze(0).expand_as(pred)
+
                 loss = criterion(pred, true)
                 train_loss.append(loss.item())
 
@@ -386,6 +419,8 @@ class Exp_ETT(Exp_Basic):
                     time_now = time.time()
 
                 loss.backward()
+                if grad_clip > 0.0:
+                    nn.utils.clip_grad_norm_(self.model.parameters(), grad_clip)
                 model_optim.step()
 
             print(f"Epoch: {epoch+1} cost time: {time.time()-epoch_time:.1f}s")
@@ -394,7 +429,8 @@ class Exp_ETT(Exp_Basic):
             test_loss = self.valid(self.test_loader, criterion, flag='test')
             print(f"Epoch {epoch+1} | Train: {train_loss:.7f} | Valid: {valid_loss:.7f} | Test: {test_loss:.7f}")
 
-            scheduler.step()
+            if scheduler is not None:
+                scheduler.step()
             early_stopping(valid_loss, self.model, path)
             if early_stopping.early_stop:
                 print("Early stopping")
@@ -411,7 +447,8 @@ class Exp_ETT(Exp_Basic):
             for batch_x, batch_y in valid_loader:
                 pred, true = self._process_one_batch(batch_x, batch_y)
                 weights.append(true.shape[0] / self.args.batch_size)
-                if len(pred.shape) == 4:
+                # SpikF returns (T, B, pred_len, D) — average T for metrics/loss
+                if pred.dim() == 4:
                     pred = pred.mean(dim=0)
                 mae, mse = metric(pred.detach().cpu().numpy(), true.detach().cpu().numpy())
                 mses.append(mse)
@@ -438,7 +475,8 @@ class Exp_ETT(Exp_Basic):
         with torch.no_grad():
             for batch_x, batch_y in self.test_loader:
                 pred, true = self._process_one_batch(batch_x, batch_y)
-                if len(pred.shape) == 4:
+                # SpikF returns (T, B, pred_len, D) — average T for final evaluation
+                if pred.dim() == 4:
                     pred = pred.mean(dim=0)
                 preds.append(pred.detach().cpu())
                 trues.append(true.detach().cpu())
@@ -450,8 +488,13 @@ class Exp_ETT(Exp_Basic):
         preds = preds.reshape(-1, preds.shape[-2], preds.shape[-1])
         trues = trues.reshape(-1, trues.shape[-2], trues.shape[-1])
 
-        mae, mse, RSE, R2 = metric_(preds, trues)
-        print(f'|  Normed  | mse: {mse:.7f} | mae: {mae:.7f} | RSE: {RSE:.7f} | R²: {R2:.7f} |')
+        m = metric_full(preds, trues)
+        print(
+            f'|  Normed  | mse: {m["mse"]:.7f} | mae: {m["mae"]:.7f} | '
+            f'rmse: {m["rmse"]:.7f} | rse: {m["rse"]:.7f} | '
+            f'r2: {m["r2"]:.7f} | mape: {m["mape"]:.7f} | '
+            f'mspe: {m["mspe"]:.7f} | corr: {m["corr"]:.7f} |'
+        )
 
         if self.args.save:
             folder_path = 'exp/ETT_results/' + setting + '/'
@@ -459,7 +502,7 @@ class Exp_ETT(Exp_Basic):
             np.save(folder_path + 'pred.npy', preds)
             np.save(folder_path + 'true.npy', trues)
 
-        return mse, mae
+        return m
 
     def _process_one_batch(self, batch_x, batch_y):
         batch_x = batch_x.float().to(self.args.rank)
@@ -467,8 +510,8 @@ class Exp_ETT(Exp_Basic):
 
         # Reset SNN state before each forward pass.
         # cd_functional covers clock_driven neurons (SpikF, TSLIF, etc.)
-        # ab_functional covers activation_based neurons (Spikformer, Spikingformer)
-        # Each call is a no-op for neuron types it doesn't own.
+        # ab_functional covers activation_based neurons (Spikformer, Spikingformer,
+        # and TS-LIF models which call reset_net internally but we call here too).
         if self.args.model not in _ANN_MODELS:
             cd_functional.reset_net(self.model)
             if _HAS_AB:

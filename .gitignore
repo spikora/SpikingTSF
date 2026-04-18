@@ -204,6 +204,8 @@ SeqSNN/ # remove later
 SeqSNN-RPE/ # remove later
 SpikF/ # remove later
 TS-LIF/ # remove later
+old_repositories/ # remove later
+.codex
 .cursorignore
 .cursorindexingignore
 
