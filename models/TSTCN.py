@@ -68,18 +68,20 @@ class TSTCNBlock(nn.Module):
         super().__init__()
         padding = (kernel_size - 1) * dilation
 
-        self.conv1   = weight_norm(
-            nn.Conv1d(in_channels, out_channels, kernel_size,
-                      dilation=dilation, padding=padding)
-        )
+        # Initialise before weight_norm so weight_v/weight_g are set from N(0,0.01).
+        # Setting .weight.data after weight_norm is a no-op — weight is a computed hook.
+        _c1 = nn.Conv1d(in_channels, out_channels, kernel_size,
+                        dilation=dilation, padding=padding)
+        _c2 = nn.Conv1d(out_channels, out_channels, kernel_size,
+                        dilation=dilation, padding=padding)
+        nn.init.normal_(_c1.weight, 0, 0.01)
+        nn.init.normal_(_c2.weight, 0, 0.01)
+        self.conv1   = weight_norm(_c1)
         self.chomp1  = Chomp1d(padding)
         self.bn1     = nn.BatchNorm1d(out_channels)
         self.tslif1  = TSLIFNode()
 
-        self.conv2   = weight_norm(
-            nn.Conv1d(out_channels, out_channels, kernel_size,
-                      dilation=dilation, padding=padding)
-        )
+        self.conv2   = weight_norm(_c2)
         self.chomp2  = Chomp1d(padding)
         self.bn2     = nn.BatchNorm1d(out_channels)
         self.tslif2  = TSLIFNode()
@@ -88,15 +90,9 @@ class TSTCNBlock(nn.Module):
             nn.Conv1d(in_channels, out_channels, 1)
             if in_channels != out_channels else None
         )
-        self.res_tslif = TSLIFNode()
-
-        self._init_weights()
-
-    def _init_weights(self):
-        self.conv1.weight.data.normal_(0, 0.01)
-        self.conv2.weight.data.normal_(0, 0.01)
         if self.downsample is not None:
-            self.downsample.weight.data.normal_(0, 0.01)
+            nn.init.normal_(self.downsample.weight, 0, 0.01)
+        self.res_tslif = TSLIFNode()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         out = self.tslif1(self.bn1(self.chomp1(self.conv1(x))))

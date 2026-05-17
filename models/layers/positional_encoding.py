@@ -212,8 +212,9 @@ class PositionEmbedding(nn.Module):
 def generate_gray_code_matrix(M: torch.Tensor, num_bits: int = 10) -> torch.Tensor:
     """Append Gray-code position bits to Q or K tensors for XNOR_Gray attention.
 
-    Encodes T*L positions as unique Gray-code bit vectors and concatenates them
-    to the last dimension of M, widening the feature space before XNOR similarity.
+    Encodes L sequence positions as unique Gray-code bit vectors and concatenates
+    them to the last dimension of M, widening the feature space before XNOR
+    similarity. Codes are shared across T steps (position is sequence-only).
 
     Args:
         M:        (T, B, H, L, D_head) — per-head Q or K tensor.
@@ -223,21 +224,22 @@ def generate_gray_code_matrix(M: torch.Tensor, num_bits: int = 10) -> torch.Tens
         (T, B, H, L, D_head + num_bits)
     """
     T, B, H, L, _ = M.shape
-    indices = torch.arange(T * L, device=M.device)
-    gray = indices ^ (indices >> 1)
-    bits = (
-        (gray.unsqueeze(-1) >> torch.arange(num_bits - 1, -1, -1, device=M.device)) & 1
-    ).float()                                                        # (T*L, num_bits)
-    bits = bits.view(T, 1, 1, L, num_bits).expand(T, B, H, L, num_bits)
-    return torch.cat([M, bits], dim=-1)
+    indices = torch.arange(L, device=M.device)
+    gray_codes = indices ^ (indices >> 1)
+    gray_bits = (
+        (gray_codes.unsqueeze(-1) >> torch.arange(num_bits - 1, -1, -1, device=M.device)) & 1
+    ).float()                                                        # (L, num_bits)
+    gray_bits = gray_bits.view(1, 1, 1, L, num_bits).expand(T, B, H, L, num_bits)
+    return torch.cat((M, gray_bits), dim=-1)
 
 
 def create_symmetric_matrix(L: int, device=None) -> torch.Tensor:
     """Build a symmetric log-distance bias matrix for XNOR_Log attention.
 
-    Entry (i, i) = ceil(log2(L)); off-diagonal entries decay linearly from
-    (diag-1) down to 0 as |i-j| increases.  Returned with broadcast-ready
-    leading singleton dims (1, 1, 1, L, L).
+    Entry (i, j) = ceil(log2((L-1) / (|i-j| + 1))), clamped to ≥ 0.
+    Diagonal entries are the largest (distance=0 → log of (L-1)/1 = L-1),
+    decaying as positions diverge. Returned with broadcast-ready leading
+    singleton dims (1, 1, 1, L, L).
 
     Args:
         L:      Sequence length.
@@ -246,14 +248,15 @@ def create_symmetric_matrix(L: int, device=None) -> torch.Tensor:
     Returns:
         Tensor of shape (1, 1, 1, L, L).
     """
-    diag = math.ceil(math.log2(max(L, 2)))
-    matrix = torch.zeros(L, L, dtype=torch.int)
-    for i in range(L):
-        matrix[i, i] = diag
-        if i < L - 1:
-            values = torch.linspace(diag - 1, 0, steps=L - i - 1).round().int()
-            matrix[i, i + 1:] = values
-            matrix[i + 1:, i] = values
+    if L <= 1:
+        matrix = torch.zeros((L, L), dtype=torch.int)
+    else:
+        i = torch.arange(L).view(-1, 1)
+        j = torch.arange(L).view(1, -1)
+        dist = torch.abs(i - j).float()
+        matrix = torch.ceil(
+            torch.log2((L - 1) / (dist + 1))
+        ).clamp(min=0).int()
     if device is not None:
         matrix = matrix.to(device)
     return matrix.unsqueeze(0).unsqueeze(0).unsqueeze(0)            # (1, 1, 1, L, L)

@@ -1,261 +1,213 @@
 # SpikingTSF
 
-A unified library for **spiking neural network (SNN) time series forecasting**, combining state-of-the-art SNN architectures with an ANN baseline under one consistent training and evaluation framework.
+SpikingTSF is an open-source benchmark library for **spiking neural network (SNN) time series forecasting**. It brings together state-of-the-art SNN architectures from multiple papers under one consistent training and evaluation framework, making it easy to compare methods fairly on the ETT benchmark suite.
+
+> **Evaluation protocol:** All models use **per-sample instance normalisation** (subtract mean, divide by std per sample, reverse after prediction), a fixed look-back window of 96, and three independent runs with seeds {42, 1234, 3407}. Reported numbers are mean ± std across the three runs.
 
 ---
 
-## Models
+🚩 **News** (2026.04) SpikingTSF is released as a unified SNN time-series forecasting library. Implementations cover five papers spanning 2023–2025, eleven SNN architectures, and two ANN baselines, all evaluated under a single consistent protocol on ETTh1, ETTh2, ETTm1, and ETTm2.
 
-| Model | Paper / Origin | Venue | Backend | Tokens |
-|-------|---------------|-------|---------|--------|
-| **SpikF** | [SpikF: Spiking Frequency-Domain Transformer](https://github.com/WWJ-creator/SpikF) | — | clock_driven | patch |
-| **iSpikformer** | Inverted Spike Transformer (SpikF repo) | — | clock_driven | patch |
-| **SpikeRNN** | Spike Recurrent Network (SpikF repo) | — | clock_driven | patch |
-| **SpikTCN** | Adapted from [SeqSNN](https://github.com/microsoft/SeqSNN) | ICML 2024 | clock_driven | channel-ind. |
-| **SpikGRU** | Adapted from [SeqSNN](https://github.com/microsoft/SeqSNN) | ICML 2024 | clock_driven | channel-ind. |
-| **TSLIF** | Inspired by [TS-LIF](https://github.com/kkking-kk/TS-LIF) | ICLR 2025 | clock_driven | patch |
-| **Spikformer** | Adapted from [SeqSNN](https://github.com/microsoft/SeqSNN) | ICML 2024 | activation_based | time-step |
-| **Spikingformer** | Adapted from [SeqSNN](https://github.com/microsoft/SeqSNN) | ICML 2024 | activation_based | time-step |
-| **DLinear** | [Are Transformers Effective for TSF?](https://github.com/thuml/Time-Series-Library) | AAAI 2023 | ANN | — |
-| **ITransformer** | Adapted from [SeqSNN](https://github.com/microsoft/SeqSNN) / [iTransformer](https://github.com/thuml/iTransformer) | ICLR 2024 | ANN | variate |
+🚩 **News** (2025) [[SpikF]](https://github.com/WWJ-creator/SpikF) introduces a spiking frequency-domain transformer for long-term forecasting. SpikF, iSpikformer, and SpikeRNN from this codebase are now included.
 
-SNN models use [SpikingJelly](https://github.com/fangwei123456/spikingjelly). SpikF-family uses the `clock_driven` API; Spikformer/Spikingformer use the newer `activation_based` API. No snntorch dependency.
+🚩 **News** (2025) [[TS-LIF]](https://github.com/kkking-kk/TS-LIF) (ICLR 2025) introduces two-compartment dendritic-somatic LIF neurons for richer temporal dynamics. TSGRU, TSTCN, and TSFormer are adapted from this work.
 
-All models use **per-sample instance normalisation** (TSLib unified evaluation protocol): subtract per-sample mean, divide by per-sample std, then reverse after prediction. This ensures fair comparison across models and datasets.
+🚩 **News** (2024) [[SeqSNN]](https://github.com/microsoft/SeqSNN) (ICML 2024, Microsoft Research) provides a systematic sequential SNN framework for time series. SpikTCN, SpikGRU, Spikformer, Spikingformer, and QKFormer are adapted from this work.
+
+🚩 **News** (2024) [[iTransformer]](https://github.com/thuml/iTransformer) (ICLR 2024) is included as an ANN upper-bound baseline, alongside [[DLinear]](https://github.com/thuml/Time-Series-Library) (AAAI 2023) as a lightweight ANN baseline.
 
 ---
 
-## Datasets
+## Leaderboard — Long-term Forecasting (ETT Average, Look-Back-96)
 
-| Dataset | Variables | Granularity | Train / Val / Test |
-|---------|-----------|-------------|-------------------|
-| ETTh1, ETTh2 | 7 | 1 hour | 8545 / 2881 / 2881 |
-| ETTm1, ETTm2 | 7 | 15 min | 34465 / 11521 / 11521 |
-| Weather | 21 | 10 min | 70% / 10% / 20% |
-| ECL (Electricity) | 321 | 1 hour | 70% / 10% / 20% |
-| Traffic | 862 | 1 hour | 70% / 10% / 20% |
-| Exchange | 8 | 1 day | 70% / 10% / 20% |
-| Solar-Energy | 137 | 10 min | 70% / 10% / 20% |
+Rankings are determined by average MSE across ETTh1, ETTh2, ETTm1, and ETTm2 (horizons 96 / 192 / 336 / 720). Results are being populated as experiments complete — see [RESULTS.md](./RESULTS.md) for per-dataset per-horizon breakdowns.
 
-Place all dataset `.csv` files under `datasets/long/`.
+| Ranking | Model | Paper | Pure Spike? | Avg MSE | Avg MAE |
+|---------|-------|-------|:-----------:|---------|---------|
+| 🥇 1st | — | — | — | — | — |
+| 🥈 2nd | — | — | — | — | — |
+| 🥉 3rd | — | — | — | — | — |
+
+**Note:** Leaderboard will be updated once all models finish their ETT runs. The table above will be replaced with final ranked numbers. Partial results (SpikF complete) are available in [RESULTS.md](./RESULTS.md).
+
+**All models in this library.** ☑ means the code is included and runnable.
+
+- [x] **SpikF** — SpikF: Spiking Frequency-Domain Transformer for Time Series Forecasting [[ICML 2025]](https://github.com/WWJ-creator/SpikF) | Pure Spike ✅
+- [x] **iSpikformer** — Inverted Spiking Transformer (from SpikF codebase) | Pure Spike ✅
+- [x] **SpikeRNN** — Spiking Recurrent Network (from SpikF codebase) | Pure Spike ✅
+- [x] **SpikTCN** — Spiking Temporal Convolutional Network [[SeqSNN, ICML 2024]](https://github.com/microsoft/SeqSNN) | Pure Spike ✅
+- [x] **SpikGRU** — Spiking Gated Recurrent Unit [[SeqSNN, ICML 2024]](https://github.com/microsoft/SeqSNN) | Pure Spike ✅
+- [x] **Spikformer** — Spiking Transformer with Spike-driven Self-Attention [[SeqSNN, ICML 2024]](https://github.com/microsoft/SeqSNN) | Pure Spike ✅
+- [x] **Spikingformer** — Pre-LIF Spiking Transformer [[SeqSNN, ICML 2024]](https://github.com/microsoft/SeqSNN) | Pure Spike ✅
+- [x] **QKFormer** — Token-Level Q/K Attention Spiking Transformer [[SeqSNN, ICML 2024]](https://github.com/microsoft/SeqSNN) | Pure Spike ✅
+- [x] **TSGRU** — Two-Compartment TS-LIF Gated Recurrent Unit [[TS-LIF, ICLR 2025]](https://github.com/kkking-kk/TS-LIF) | Pure Spike ✅
+- [x] **TSTCN** — Two-Compartment TS-LIF Temporal Convolutional Network [[TS-LIF, ICLR 2025]](https://github.com/kkking-kk/TS-LIF) | Pure Spike ✅
+- [x] **TSFormer** — Two-Compartment TS-LIF Inverted Transformer [[TS-LIF, ICLR 2025]](https://github.com/kkking-kk/TS-LIF) | Pure Spike ✅
+- [x] **ITransformer** — iTransformer: Inverted Transformers Are Effective for Time Series Forecasting [[ICLR 2024]](https://arxiv.org/abs/2310.06625) | Pure Spike ❌
+- [x] **DLinear** — Are Transformers Effective for Time Series Forecasting? [[AAAI 2023]](https://arxiv.org/abs/2205.13504) | Pure Spike ❌
 
 ---
 
-## Installation
+## Implemented Papers
+
+Papers are listed in chronological order of publication. Each entry links to the original repository and shows which models in this library are derived from it.
+
+### 2023
+
+- [x] **DLinear** — Are Transformers Effective for Time Series Forecasting? [[AAAI 2023]](https://arxiv.org/abs/2205.13504) [[Code]](https://github.com/thuml/Time-Series-Library/blob/main/models/DLinear.py)
+  - Models: `DLinear`
+  - Lightweight ANN decomposition baseline (trend + seasonal linear layers). Included as a strong non-spiking reference point.
+
+### 2024
+
+- [x] **SeqSNN** — Sequential Spiking Neural Networks for Time Series Forecasting [[ICML 2024]](https://github.com/microsoft/SeqSNN)
+  - Models: `SpikTCN`, `SpikGRU`, `Spikformer`, `Spikingformer`, `QKFormer`
+  - Microsoft Research framework providing a systematic comparison of SNN architectures (TCN, GRU, and three Transformer variants) on time-series tasks. Uses the `activation_based` SpikingJelly backend for Transformer variants and clock-driven backend for recurrent/convolutional models.
+
+- [x] **iTransformer** — iTransformer: Inverted Transformers Are Effective for Time Series Forecasting [[ICLR 2024]](https://arxiv.org/abs/2310.06625) [[Code]](https://github.com/thuml/iTransformer)
+  - Models: `ITransformer`
+  - ANN baseline that inverts the attention axis to treat variates as tokens. Included to provide an ANN upper bound for the same channel-as-token design adopted by SNN counterparts.
+
+### 2025
+
+- [x] **TS-LIF** — TS-LIF: Two-Compartment Dendritic-Somatic Spiking Neuron for Time Series Forecasting [[ICLR 2025]](https://github.com/kkking-kk/TS-LIF) [[arXiv]](https://arxiv.org/abs/2503.05108)
+  - Models: `TSGRU`, `TSTCN`, `TSFormer`
+  - Proposes a biologically-inspired two-compartment neuron (dendritic `v1` + somatic `v2`) with learnable temporal dynamics. Drop-in replacement for standard LIF nodes inside any SNN architecture.
+
+- [x] **SpikF** — SpikF: Spiking Frequency-Domain Transformer for Time Series Forecasting [[ICML 2025]](https://github.com/WWJ-creator/SpikF)
+  - Models: `SpikF`, `iSpikformer`, `SpikeRNN`
+  - Introduces Spiking Patch Embedding (SPE) and a Spiking Fourier Selection (SFS) block that processes time-series patches in the frequency domain with binary spike activations throughout.
+
+---
+
+## Getting Started
+
+### Installation
 
 ```bash
 # Python 3.9+
 pip install torch torchvision
 pip install spikingjelly
-pip install numpy pandas scikit-learn
+pip install numpy pandas scikit-learn optuna
 ```
+
+### Prepare Data
+
+Download the ETT datasets and place them under `datasets/long/`:
+
+```
+datasets/long/
+├── ETTh1.csv
+├── ETTh2.csv
+├── ETTm1.csv
+└── ETTm2.csv
+```
+
+The ETT datasets are available from the [Autoformer repository](https://github.com/thuml/Autoformer) or [Hugging Face](https://huggingface.co/datasets/thuml/Time-Series-Library).
+
+### Run Experiments
+
+All experiments are run through `run_long.py`. Configuration can be supplied via a YAML file under `configs/` or directly as command-line arguments. Provided shell scripts under `scripts/` reproduce all paper configurations.
+
+```bash
+# SpikF on all ETT datasets (all horizons, 3 seeds each)
+bash scripts/run_ETTh1.sh
+bash scripts/run_ETTh2.sh
+bash scripts/run_ETTm1.sh
+bash scripts/run_ETTm2.sh
+```
+
+Outputs (training logs and final MAE/MSE/RMSE/R² per run plus mean ± std) are written to `Output/<dataset>/<model>/pl<horizon>.txt`.
+
+### Key Hyperparameters
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `--T` | SNN simulation time steps | 16 |
+| `--tau` | LIF membrane time constant | 2.0 |
+| `--levels` | Number of blocks / encoder layers | 2 |
+| `--alpha` | Capacity knob (maps to d_model or hidden_dim) | 2.0 |
+| `--seq_len` | Look-back window length | 96 |
+| `--pred_len` | Forecast horizon | 336 |
+| `--itr` | Independent runs (seeds: 42, 1234, 3407) | 3 |
+| `--encoder_type` | Spike encoding scheme: `conv`, `delta`, `repeat` | `conv` |
+| `--pe_type` | Positional encoding: `none`, `learn`, `static`, `conv`, `neuron`, `random` | `none` |
+| `--loss` | Training loss: `mae` or `mse` | `mae` |
+| `--scheduler` | LR schedule: `cosine`, `step`, `none` | `cosine` |
+
+A full parameter reference is in [Parameters.md](./Paramters.md).
 
 ---
 
-## Quick Start
+## Results
 
-**SpikF on ETTh1 (multivariate, horizon 336):**
-```bash
-python run_long.py \
-  --model SpikF \
-  --data ETTh1 --data_path ETTh1.csv \
-  --features M --seq_len 96 --pred_len 336 \
-  --T 16 --tau 2.0 --levels 2 \
-  --patch_num 48 --patch_dim 32 \
-  --hidden_dim 720 --alpha 2.0 \
-  --train_epochs 10 --batch_size 32 --lr 5e-4
-```
+Detailed per-dataset, per-horizon results (mean ± std across 3 seeds) are in **[RESULTS.md](./RESULTS.md)**.
 
-**DLinear baseline:**
-```bash
-python run_long.py \
-  --model DLinear \
-  --data ETTh1 --data_path ETTh1.csv \
-  --features M --seq_len 96 --pred_len 336 \
-  --moving_avg 25 \
-  --train_epochs 10 --batch_size 32 --lr 5e-4
-```
+Summary of completed runs (averaged across horizons 96 / 192 / 336 / 720):
 
-**TS-LIF with multi-scale temporal memory:**
-```bash
-python run_long.py \
-  --model TSLIF \
-  --data weather --data_path weather.csv \
-  --features M --seq_len 96 --pred_len 336 \
-  --T 16 --tau 2.0 --levels 3 \
-  --patch_num 48 --patch_dim 32 --hidden_dim 720 \
-  --train_epochs 10 --batch_size 32 --lr 5e-4
-```
-
-**Spikformer (SSA spike transformer):**
-```bash
-python run_long.py \
-  --model Spikformer \
-  --data ETTh1 --data_path ETTh1.csv \
-  --features M --seq_len 96 --pred_len 336 \
-  --T 4 --tau 2.0 --levels 2 \
-  --d_model 256 --n_heads 8 --d_ff 1024 \
-  --common_thr 1.0 --qk_scale 0.125 --encoder_type conv \
-  --train_epochs 10 --batch_size 32 --lr 5e-4
-```
-
-**ITransformer (inverted ANN transformer):**
-```bash
-python run_long.py \
-  --model ITransformer \
-  --data weather --data_path weather.csv \
-  --features M --seq_len 96 --pred_len 336 \
-  --levels 3 --d_model 512 --n_heads 8 --d_ff 2048 \
-  --train_epochs 10 --batch_size 32 --lr 1e-4
-```
-
-**Run pre-written scripts:**
-```bash
-bash scripts/SpikF_ETTh1.sh
-bash scripts/SpikF_weather.sh
-# etc.
-```
-
----
-
-## Repository Structure
-
-```
-SpikingTSF/
-├── run_long.py                  # main entry point
-├── exp/
-│   ├── exp_basic.py             # Exp_Basic base class
-│   └── exp_ETT.py               # training / validation / test loop
-├── models/
-│   ├── SpikF.py                 # SPE + SFS blocks; returns (T,B,H,D)
-│   ├── iSpikformer.py           # inverted spike transformer (SpikF repo)
-│   ├── SpikeRNN.py              # spike RNN (SpikF repo)
-│   ├── SpikTCN.py               # dilated causal TCN (adapted from SeqSNN)
-│   ├── SpikGRU.py               # spiking GRU (adapted from SeqSNN)
-│   ├── TSLIF.py                 # multi-scale fast/slow LIF (inspired by TS-LIF)
-│   ├── Spikformer.py            # SSA spike transformer — temporal tokens (SeqSNN)
-│   ├── Spikingformer.py         # Spikformer + ConvPE (SeqSNN)
-│   ├── DLinear.py               # decomposition linear baseline (TSLib)
-│   ├── ITransformer.py          # inverted ANN transformer baseline (SeqSNN/TSLib)
-│   └── layers/
-│       ├── spike_attention.py   # SSA, MLP, Block — shared by Spikformer models
-│       └── spike_encoder.py     # ConvEncoder, DeltaEncoder, RepeatEncoder
-├── data_provider/
-│   └── ETT_data_loader.py       # Dataset_ETT_hour/minute, Dataset_Custom, Solar
-├── utils/
-│   ├── metrics.py               # MAE, MSE, RSE, R²
-│   └── tools.py                 # EarlyStopping, StandardScaler
-├── scripts/
-│   ├── *.sh                     # SpikF scripts (existing)
-│   ├── Spikformer/              # Spikformer benchmark scripts
-│   ├── Spikingformer/           # Spikingformer benchmark scripts
-│   └── ITransformer/            # ITransformer benchmark scripts
-├── SeqSNN/                      # original SeqSNN repo (reference, not imported)
-└── datasets/long/               # place CSV files here
-```
-
----
-
-## Model Interface
-
-All models follow the TSLib `Model(configs)` convention:
-
-```python
-class Model(nn.Module):
-    def __init__(self, configs):
-        # configs has: seq_len, pred_len, enc_in, T, tau, levels,
-        #              patch_num, patch_dim, hidden_dim, dropout, ...
-        ...
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # x:   (B, seq_len, D)
-        # out: (B, pred_len, D)
-        ...
-```
-
-SpikF returns `(T, B, pred_len, D)` (4D) — `exp_ETT.py` averages over the T dimension automatically before computing loss and metrics.
-
-The experiment runner injects `enc_in` and `c_out` into `args` before model construction, so models can always rely on `configs.enc_in`.
-
----
-
-## Adding a New Model
-
-1. Create `models/MyModel.py` with `class Model(nn.Module)`.
-2. Add `from models.MyModel import Model as MyModel` to `exp/exp_ETT.py`.
-3. Add `'MyModel'` to `_NEW_STYLE_MODELS` and `_NEW_STYLE_CLASS` in `exp_ETT.py`.
-4. Add `'MyModel'` to the `--model` choices in `run_long.py`.
-5. If it is a pure ANN (no spikingjelly neurons), add it to `_ANN_MODELS`.
-
----
-
-## CLI Arguments
-
-| Argument | Default | Description |
-|----------|---------|-------------|
-| `--model` | `SpikF` | Model name |
-| `--data` | `ETTh1` | Dataset name |
-| `--root_path` | `./datasets/long/` | Dataset directory |
-| `--data_path` | `ETTh1.csv` | CSV filename |
-| `--features` | `M` | `M` multivariate, `S` univariate, `MS` multi→single |
-| `--seq_len` | `96` | Lookback window length |
-| `--pred_len` | `336` | Forecast horizon |
-| `--label_len` | `48` | Decoder overlap length |
-| `--T` | `16` | SNN time steps |
-| `--tau` | `2.0` | LIF membrane time constant |
-| `--levels` | `2` | Number of blocks / layers |
-| `--patch_num` | `48` | Number of patches |
-| `--patch_dim` | `32` | Patch embedding / TCN hidden dim |
-| `--alpha` | `2.0` | Alpha parameter (SpikF / iSpikformer) |
-| `--hidden_dim` | `720` | Dense hidden size |
-| `--d_model` | `256` | Attention / embedding dim (Spikformer / Spikingformer / ITransformer) |
-| `--n_heads` | `8` | Number of attention heads |
-| `--d_ff` | `1024` | Feedforward hidden dim (default 4 × d_model) |
-| `--common_thr` | `1.0` | LIF spike threshold (Spikformer / Spikingformer) |
-| `--qk_scale` | `0.125` | Attention score scale (Spikformer / Spikingformer) |
-| `--encoder_type` | `conv` | Spike encoder: `conv` \| `delta` \| `repeat` |
-| `--kernel_size` | `3` | Conv kernel size (SpikTCN) |
-| `--dropout` | `0.1` | Dropout rate |
-| `--moving_avg` | `25` | Trend kernel size (DLinear) |
-| `--individual` | `False` | Per-variate linear layers (DLinear) |
-| `--train_epochs` | `10` | Training epochs |
-| `--batch_size` | `32` | Batch size |
-| `--patience` | `3` | Early stopping patience |
-| `--lr` | `5e-4` | Learning rate |
-| `--loss` | `mae` | Loss function: `mae` or `mse` |
-| `--gpu` | `0` | CUDA device index |
-| `--save` | `0` | Save predictions (1 = yes) |
-| `--random_seed` | `0` | Random seed |
-
----
-
-## Acknowledgements
-
-This library builds on and adapts code from:
-
-- **[SpikF](https://github.com/WWJ-creator/SpikF)** — core SpikF, iSpikformer, SpikeRNN architectures
-- **[SeqSNN](https://github.com/microsoft/SeqSNN)** (Microsoft Research, MIT License) — SpikeTCN and SpikeGRU adapted from snntorch to spikingjelly
-- **[TS-LIF](https://github.com/kkking-kk/TS-LIF)** — multi-scale temporal LIF design (ICLR 2025)
-- **[Time-Series-Library](https://github.com/thuml/Time-Series-Library)** (THUML, MIT License) — DLinear model, `Model(configs)` API convention, data loaders
+| Model | ETTh1 MSE | ETTh2 MSE | ETTm1 MSE | ETTm2 MSE | Status |
+|-------|-----------|-----------|-----------|-----------|--------|
+| **SpikF** | 0.4420 | 0.3729 | — | — | Partial (ETTm1 pl336+ and ETTm2 pl720 in progress) |
+| iSpikformer | — | — | — | — | Pending |
+| SpikeRNN | — | — | — | — | Pending |
+| SpikTCN | — | — | — | — | Pending |
+| SpikGRU | — | — | — | — | Pending |
+| Spikformer | — | — | — | — | Pending |
+| Spikingformer | — | — | — | — | Pending |
+| QKFormer | — | — | — | — | Pending |
+| TSGRU | — | — | — | — | Pending |
+| TSTCN | — | — | — | — | Pending |
+| TSFormer | — | — | — | — | Pending |
+| ITransformer | — | — | — | — | Pending |
+| DLinear | — | — | — | — | Pending |
 
 ---
 
 ## Citation
 
-If you use SpikingTSF in your research, please cite the relevant upstream works:
+If you use SpikingTSF in your research, please cite the papers corresponding to the models you use:
 
 ```bibtex
-@inproceedings{lv2024seqsnn,
-  title     = {Efficient and Effective Time-Series Forecasting with Spiking Neural Networks},
-  author    = {Lv, Changze and others},
-  booktitle = {ICML},
+@inproceedings{spikf2025,
+  title     = {SpikF: Spiking Frequency-Domain Transformer for Time Series Forecasting},
+  booktitle = {International Conference on Machine Learning},
+  year      = {2025}
+}
+
+@inproceedings{seqsnn2024,
+  title     = {Sequential Spiking Neural Networks for Time Series Forecasting},
+  booktitle = {International Conference on Machine Learning},
   year      = {2024}
 }
 
-@inproceedings{zeng2023dlinear,
+@inproceedings{tslif2025,
+  title     = {TS-LIF: Two-Compartment Dendritic-Somatic Spiking Neuron for Time Series Forecasting},
+  booktitle = {International Conference on Learning Representations},
+  year      = {2025}
+}
+
+@inproceedings{itransformer2024,
+  title     = {iTransformer: Inverted Transformers Are Effective for Time Series Forecasting},
+  booktitle = {International Conference on Learning Representations},
+  year      = {2024}
+}
+
+@inproceedings{dlinear2023,
   title     = {Are Transformers Effective for Time Series Forecasting?},
-  author    = {Zeng, Ailing and others},
-  booktitle = {AAAI},
+  booktitle = {AAAI Conference on Artificial Intelligence},
   year      = {2023}
 }
 ```
+
+---
+
+## Acknowledgement
+
+SpikingTSF is built on top of the following excellent open-source projects:
+
+- SNN backend: [SpikingJelly](https://github.com/fangwei123456/spikingjelly)
+- SpikF family: [WWJ-creator/SpikF](https://github.com/WWJ-creator/SpikF)
+- SeqSNN family: [microsoft/SeqSNN](https://github.com/microsoft/SeqSNN)
+- TS-LIF family: [kkking-kk/TS-LIF](https://github.com/kkking-kk/TS-LIF)
+- ANN baselines: [thuml/Time-Series-Library](https://github.com/thuml/Time-Series-Library), [thuml/iTransformer](https://github.com/thuml/iTransformer)
+- ETT datasets: [thuml/Autoformer](https://github.com/thuml/Autoformer)

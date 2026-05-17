@@ -147,9 +147,9 @@ parser.add_argument('--scheduler_gamma', type=float, default=0.5,
 parser.add_argument('--cols', type=str, nargs='+',
                     help='specific columns to select from dataset')
 parser.add_argument('--num_workers', type=int, default=1)
-parser.add_argument('--train_epochs', type=int, default=10)
+parser.add_argument('--train_epochs', type=int, default=20)
 parser.add_argument('--batch_size', type=int, default=32)
-parser.add_argument('--patience', type=int, default=3,
+parser.add_argument('--patience', type=int, default=10,
                     help='early stopping patience (epochs without improvement)')
 parser.add_argument('--lr', type=float, default=5e-4, help='initial learning rate')
 parser.add_argument('--loss', type=str, default='mae', choices=['mae', 'mse'],
