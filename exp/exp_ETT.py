@@ -424,6 +424,8 @@ class Exp_ETT(Exp_Basic):
                     iter_count = 0
                     time_now = time.time()
 
+                if not torch.isfinite(loss):
+                    continue
                 loss.backward()
                 if grad_clip > 0.0:
                     nn.utils.clip_grad_norm_(self.model.parameters(), grad_clip)

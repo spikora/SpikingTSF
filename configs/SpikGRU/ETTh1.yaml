@@ -1,7 +1,7 @@
-# SpikF — ETTh1 configuration
-# Best params from Optuna search (62 trials, trial 33, val_mae=0.75242)
+# SpikGRU — ETTh1 configuration
+# Best params from Optuna search (100 trials, trial 48, val_mae=0.91866)
 
-model: SpikF
+model: SpikGRU
 data: ETTh1
 data_path: ETTh1.csv
 features: M
@@ -14,20 +14,19 @@ seq_len: 96
 label_len: 0
 # pred_len is swept in the shell script
 
-# SpikF architecture
-# Capacity knobs: patch_num × patch_dim (patch embedding) + hidden_dim (decoder)
-# patch_num must divide seq_len (96): valid choices {4,8,12,16,24,48}
-T: 16
-tau: 2.4837783249744376
+# SNN architecture
+T: 4
+tau: 3.149666943742141
 levels: 1
-patch_num: 16
-patch_dim: 32
-hidden_dim: 256
+alpha: 128
+encoder_type: delta
+pe_type: conv
+pe_mode: add
 
 # Training
-lr: 0.0005239209613909207
-batch_size: 64
-weight_decay: 0.0005589318717442294
+lr: 0.004841718080373416
+batch_size: 32
+weight_decay: 0.00025005659370460736
 grad_clip: 1.0
 scheduler: cosine
 scheduler_T_max: 75

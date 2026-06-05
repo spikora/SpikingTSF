@@ -1,0 +1,50 @@
+# iSpikformer — ETTh1 configuration
+# Best params from Optuna search (100 trials, trial 97, val_mae=0.76383)
+# iTransformer-style: attention over D channel tokens, not L time steps
+
+model: iSpikformer
+data: ETTh1
+data_path: ETTh1.csv
+features: M
+target: OT
+root_path: ./datasets/long/
+checkpoints: exp/run_ETT/
+
+# Forecasting window
+seq_len: 96
+label_len: 0
+# pred_len is swept in the shell script
+
+# SNN architecture
+T: 4
+tau: 1.1759094833333463
+levels: 1
+alpha: 512              # → d_model inside exp_ETT
+encoder_type: conv
+
+# Fixed architecture (not tuned)
+n_heads: 8
+common_thr: 1.0
+qk_scale: 0.125
+# d_ff omitted → auto = d_model × 4 = 2048
+# No pe_type / attn_type — inverted embedding handles temporal structure
+
+# Training
+lr: 0.0015351414382520862
+batch_size: 32
+weight_decay: 0.00020368266163954546
+grad_clip: 0.0
+scheduler: none
+scheduler_T_max: 75
+scheduler_step: 50
+scheduler_gamma: 0.5
+train_epochs: 300
+patience: 15
+loss: mae
+optimizer: Adam
+
+# Multi-run — seeds [42, 1234, 3407] used automatically when itr > 1
+itr: 3
+num_workers: 4
+save: 0
+gpu: 0

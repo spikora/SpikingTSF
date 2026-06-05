@@ -23,7 +23,6 @@ activation_based API and our codebase conventions:
 
 import torch
 from torch import nn
-from torch.nn.utils import weight_norm
 from spikingjelly.activation_based import surrogate, neuron
 
 from models.layers.spike_encoder import ConvEncoder, DeltaEncoder
@@ -70,20 +69,16 @@ class SpikeTCNBlock(nn.Module):
         super().__init__()
         padding = (kernel_size - 1) * dilation
 
-        # Initialise before weight_norm so weight_v/weight_g are set from N(0,0.01).
-        # Setting .weight.data after weight_norm is a no-op — weight is a computed hook.
-        _c1 = nn.Conv1d(in_channels, out_channels, kernel_size,
-                        dilation=dilation, padding=padding)
-        _c2 = nn.Conv1d(out_channels, out_channels, kernel_size,
-                        dilation=dilation, padding=padding)
-        nn.init.normal_(_c1.weight, 0, 0.01)
-        nn.init.normal_(_c2.weight, 0, 0.01)
-        self.conv1 = weight_norm(_c1)
+        self.conv1 = nn.Conv1d(in_channels, out_channels, kernel_size,
+                               dilation=dilation, padding=padding)
+        nn.init.normal_(self.conv1.weight, 0, 0.01)
         self.chomp1 = Chomp1d(padding)
         self.bn1 = nn.BatchNorm1d(out_channels)
         self.lif1 = _make_lif_s(tau)
 
-        self.conv2 = weight_norm(_c2)
+        self.conv2 = nn.Conv1d(out_channels, out_channels, kernel_size,
+                               dilation=dilation, padding=padding)
+        nn.init.normal_(self.conv2.weight, 0, 0.01)
         self.chomp2 = Chomp1d(padding)
         self.bn2 = nn.BatchNorm1d(out_channels)
         self.lif2 = _make_lif_s(tau)

@@ -1,0 +1,46 @@
+# TSTCN — ETTh2 configuration
+# Best params from Optuna search (100 trials, trial 52, val_mae=0.40909)
+# TSTCN = SpikTCN with LIFNode replaced by TSLIFNode (arXiv:2503.05108)
+
+model: TSTCN
+data: ETTh2
+data_path: ETTh2.csv
+features: M
+target: OT
+root_path: ./datasets/long/
+checkpoints: exp/run_ETT/
+
+# Forecasting window
+seq_len: 96
+label_len: 0
+# pred_len is swept in the shell script
+
+# SNN architecture
+T: 4
+tau: 1.2903199370188214
+levels: 3
+alpha: 512
+kernel_size: 3
+encoder_type: conv
+pe_type: none
+pe_mode: add
+
+# Training
+lr: 0.002466733162596138
+batch_size: 32
+weight_decay: 5.569838829671898e-07
+grad_clip: 1.0
+scheduler: cosine
+scheduler_T_max: 75
+scheduler_step: 50
+scheduler_gamma: 0.5
+train_epochs: 300
+patience: 15
+loss: mae
+optimizer: Adam
+
+# Multi-run — seeds [42, 1234, 3407] used automatically when itr > 1
+itr: 3
+num_workers: 4
+save: 0
+gpu: 0

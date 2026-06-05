@@ -1,0 +1,53 @@
+# Spikingformer — ETTh2 configuration
+# Best params from Optuna search (100 trials, trial 83, val_mae=0.42650)
+# attn_type=xnor_gray forces pe_type=conv (assert in Spikingformer.__init__)
+
+model: Spikingformer
+data: ETTh2
+data_path: ETTh2.csv
+features: M
+target: OT
+root_path: ./datasets/long/
+checkpoints: exp/run_ETT/
+
+# Forecasting window
+seq_len: 96
+label_len: 0
+# pred_len is swept in the shell script
+
+# SNN architecture
+T: 4
+tau: 3.5990213788709555
+levels: 1
+alpha: 128              # → d_model inside exp_ETT
+encoder_type: conv
+pe_type: conv           # forced by xnor_gray; must be conv for XNOR variants
+attn_type: xnor_gray
+
+# Fixed architecture (not tuned)
+n_heads: 8
+common_thr: 1.0
+qk_scale: 0.125
+gray_bits: 10
+dropout: 0.1
+# d_ff omitted → auto = d_model × 4 = 512
+
+# Training
+lr: 0.002596817968562547
+batch_size: 128
+weight_decay: 0.000581067256532656
+grad_clip: 5.0
+scheduler: none
+scheduler_T_max: 75
+scheduler_step: 50
+scheduler_gamma: 0.5
+train_epochs: 300
+patience: 15
+loss: mae
+optimizer: Adam
+
+# Multi-run — seeds [42, 1234, 3407] used automatically when itr > 1
+itr: 3
+num_workers: 4
+save: 0
+gpu: 0

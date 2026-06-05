@@ -235,5 +235,8 @@ old_repositories/
 Output/
 test_results/
 .codex
+.agents/
 README_TSLIB.md
+Paramters.md
+
 
