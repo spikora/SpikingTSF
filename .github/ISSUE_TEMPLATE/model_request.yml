@@ -1,0 +1,56 @@
+name: Model Request
+description: Request or propose a new model to be added to SpikingTSF
+labels: ["model-request"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template to propose a new SNN or ANN forecasting model for inclusion.
+
+  - type: input
+    id: model_name
+    attributes:
+      label: Model Name
+      description: Name of the model as it appears in the paper.
+    validations:
+      required: true
+
+  - type: input
+    id: paper_link
+    attributes:
+      label: Paper Link
+      description: Link to the original paper (arXiv, ACL Anthology, proceedings page, etc.).
+    validations:
+      required: true
+
+  - type: input
+    id: code_link
+    attributes:
+      label: Source Code Link
+      description: Link to the official code repository, if available.
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Why Should This Model Be Included?
+      description: |
+        Explain how this model fits within the scope of SpikingTSF. Is it an SNN model for time-series forecasting? Does it target the ETT benchmarks or similar datasets?
+    validations:
+      required: true
+
+  - type: textarea
+    id: dataset_relevance
+    attributes:
+      label: Dataset / Protocol Relevance
+      description: Does this model use the ETT datasets or a compatible protocol? Does it report results for horizons 96/192/336/720?
+
+  - type: dropdown
+    id: willing_to_contribute
+    attributes:
+      label: Are You Willing to Contribute the Implementation?
+      options:
+        - "Yes, I can submit a PR"
+        - "Possibly, with guidance"
+        - "No, requesting only"
+    validations:
+      required: true

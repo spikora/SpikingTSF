@@ -1,0 +1,36 @@
+cff-version: 1.2.0
+message: >
+  If you use SpikingTSF in academic work, including its codebase, training loop,
+  data loading pipeline, evaluation protocol, scripts, model implementations, or
+  benchmark structure, please cite the related SpikF-GO paper and this software
+  repository. Please also cite the original paper(s) for any specific model(s)
+  you use.
+title: "SpikingTSF: A Unified Benchmark Library for Spiking Neural Network Based Time-Series Forecasting"
+authors:
+  - family-names: Bakhshaliyev
+    given-names: Jafar
+version: "0.1.0"
+date-released: "2026-06-06"
+url: "https://github.com/spikora/SpikingTSF"
+repository-code: "https://github.com/spikora/SpikingTSF"
+license: MIT
+type: software
+abstract: >
+  SpikingTSF is an open-source benchmark library for spiking neural network
+  based time-series forecasting. It integrates multiple SNN forecasting
+  architectures and ANN baselines under a unified training and evaluation
+  framework, enabling reproducible comparison on standard benchmarks.
+keywords:
+  - spiking neural networks
+  - time series forecasting
+  - benchmark
+  - deep learning
+  - neuromorphic computing
+preferred-citation:
+  type: article
+  title: "SpikF-GO: Spiking Fourier Graph Operators for Multivariate Time Series Forecasting"
+  authors:
+    - family-names: Bakhshaliyev
+      given-names: Jafar
+  year: 2026
+  notes: "TODO: update with venue, proceedings information, and DOI after publication"

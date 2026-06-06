@@ -1,0 +1,44 @@
+# SpikeRNN — ETTh2 configuration
+# Best params from Optuna search (100 trials, trial 23, val_mae=0.43723)
+
+model: SpikeRNN
+data: ETTh2
+data_path: ETTh2.csv
+features: M
+target: OT
+root_path: ./datasets/long/
+checkpoints: exp/run_ETT/
+
+# Forecasting window
+seq_len: 96
+label_len: 0
+# pred_len is swept in the shell script
+
+# SNN architecture
+T: 4
+tau: 2.940550034062874
+levels: 3
+alpha: 128
+encoder_type: conv
+pe_type: static
+pe_mode: add
+
+# Training
+lr: 0.0049832159990683715
+batch_size: 32
+weight_decay: 0.0009223249073965636
+grad_clip: 5.0
+scheduler: none
+scheduler_T_max: 75
+scheduler_step: 50
+scheduler_gamma: 0.5
+train_epochs: 300
+patience: 15
+loss: mae
+optimizer: Adam
+
+# Multi-run — seeds [42, 1234, 3407] used automatically when itr > 1
+itr: 3
+num_workers: 4
+save: 0
+gpu: 0

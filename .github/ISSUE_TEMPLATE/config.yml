@@ -1,0 +1,17 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Bug Report
+    url: https://github.com/spikora/SpikingTSF/issues/new?template=bug_report.yml
+    about: Report a bug or unexpected behavior
+  - name: Model Request
+    url: https://github.com/spikora/SpikingTSF/issues/new?template=model_request.yml
+    about: Propose a new model for inclusion in SpikingTSF
+  - name: Result Submission
+    url: https://github.com/spikora/SpikingTSF/issues/new?template=result_submission.yml
+    about: Submit independently reproduced benchmark results
+  - name: Documentation Issue
+    url: https://github.com/spikora/SpikingTSF/issues/new?template=documentation.yml
+    about: Report unclear or incorrect documentation
+  - name: Discussions
+    url: https://github.com/spikora/SpikingTSF/discussions
+    about: Ask questions or discuss ideas

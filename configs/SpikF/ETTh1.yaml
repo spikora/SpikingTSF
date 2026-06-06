@@ -1,0 +1,45 @@
+# SpikF — ETTh1 configuration
+# Best params from Optuna search (62 trials, trial 33, val_mae=0.75242)
+
+model: SpikF
+data: ETTh1
+data_path: ETTh1.csv
+features: M
+target: OT
+root_path: ./datasets/long/
+checkpoints: exp/run_ETT/
+
+# Forecasting window
+seq_len: 96
+label_len: 0
+# pred_len is swept in the shell script
+
+# SpikF architecture
+# Capacity knobs: patch_num × patch_dim (patch embedding) + hidden_dim (decoder)
+# patch_num must divide seq_len (96): valid choices {4,8,12,16,24,48}
+T: 16
+tau: 2.4837783249744376
+levels: 1
+patch_num: 16
+patch_dim: 32
+hidden_dim: 256
+
+# Training
+lr: 0.0005239209613909207
+batch_size: 64
+weight_decay: 0.0005589318717442294
+grad_clip: 1.0
+scheduler: cosine
+scheduler_T_max: 75
+scheduler_step: 50
+scheduler_gamma: 0.5
+train_epochs: 300
+patience: 15
+loss: mae
+optimizer: Adam
+
+# Multi-run — seeds [42, 1234, 3407] used automatically when itr > 1
+itr: 3
+num_workers: 4
+save: 0
+gpu: 0
