@@ -1,0 +1,74 @@
+name: Result Submission
+description: Submit independently reproduced benchmark results
+labels: ["results"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template to submit results you have independently reproduced or produced for a model in SpikingTSF.
+        Results must be reproducible and follow the protocol in PROTOCOL.md.
+
+  - type: input
+    id: model
+    attributes:
+      label: Model Name
+      description: e.g. SpikF, TSGRU, iSpikformer
+    validations:
+      required: true
+
+  - type: input
+    id: dataset
+    attributes:
+      label: Dataset
+      description: e.g. ETTh1, ETTh2, ETTm1, ETTm2
+    validations:
+      required: true
+
+  - type: input
+    id: horizon
+    attributes:
+      label: Prediction Horizon(s)
+      description: e.g. 96, 192, 336, 720 (or "all 4")
+    validations:
+      required: true
+
+  - type: textarea
+    id: metrics
+    attributes:
+      label: Metrics
+      description: |
+        Report MSE and MAE (mean ± std across seeds if multiple runs). Include RMSE and R² if available.
+      placeholder: |
+        H=96:  MSE = 0.XXXX ± 0.XXXX, MAE = 0.XXXX ± 0.XXXX
+        H=192: MSE = 0.XXXX ± 0.XXXX, MAE = 0.XXXX ± 0.XXXX
+    validations:
+      required: true
+
+  - type: textarea
+    id: command
+    attributes:
+      label: Command / Script Used
+      description: The exact script or command used to produce these results.
+      render: bash
+    validations:
+      required: true
+
+  - type: input
+    id: hardware
+    attributes:
+      label: Hardware
+      description: e.g. NVIDIA A100 80GB, RTX 3090
+
+  - type: input
+    id: seeds
+    attributes:
+      label: Seeds Used
+      description: e.g. 42, 1234, 3407
+    validations:
+      required: true
+
+  - type: textarea
+    id: log
+    attributes:
+      label: Log File or Output
+      description: Paste the relevant output log or attach it as a file.

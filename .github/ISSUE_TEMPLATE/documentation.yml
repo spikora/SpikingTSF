@@ -1,0 +1,25 @@
+name: Documentation Issue
+description: Report unclear, incorrect, or missing documentation
+labels: ["documentation"]
+body:
+  - type: input
+    id: location
+    attributes:
+      label: Page or Section
+      description: Which file or section is affected? e.g. README.md installation section, PROTOCOL.md
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What is unclear, incorrect, or missing?
+    validations:
+      required: true
+
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested Improvement
+      description: How should it be fixed or improved? A draft replacement is very helpful.

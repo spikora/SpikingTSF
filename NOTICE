@@ -1,0 +1,14 @@
+SpikingTSF
+Copyright (c) 2026 Jafar Bakhshaliyev
+
+This software includes adaptations of code from the following open-source projects:
+
+- SpikF (WWJ-creator/SpikF) — adapted for integration into the unified framework
+- SeqSNN (microsoft/SeqSNN, MIT License) — Spikformer, Spikingformer, QKFormer, iSpikformer, SpikeRNN, SpikTCN, SpikGRU
+- TS-LIF (kkking-kk/TS-LIF) — TSFormer, TSGRU, TSTCN (two-compartment LIF neurons)
+- Time-Series-Library (thuml/Time-Series-Library, MIT License) — DLinear and framework conventions
+- iTransformer (thuml/iTransformer, MIT License) — iTransformer ANN baseline
+
+Each of the above projects has its own license and citation requirements. When using adapted code, the original licenses and copyright notices of those projects apply to their respective portions. Users are responsible for complying with those licenses and citing the original authors.
+
+SpikingTSF itself is licensed under the MIT License. See LICENSE for details.
