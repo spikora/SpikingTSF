@@ -28,6 +28,7 @@ jobs:
 
       - name: Install dependencies
         run: |
+          pip install pytest
           pip install numpy pandas scikit-learn scipy matplotlib tqdm pyyaml timm
           pip install spikingjelly==0.0.0.0.14 || pip install spikingjelly
 
