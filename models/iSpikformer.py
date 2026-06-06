@@ -10,15 +10,15 @@ Reference:
 Official project repository:
     https://github.com/microsoft/SeqSNN
 
-Architecture follows SeqSNN's iSpikformer network (iTransformer paradigm):
-  1. Spike encoder (conv or delta)  → (T, B, D, L)
-  2. Transpose                      → (T, B, L, D)
-  3. DataEmbeddingInverted          → (T, B, D, d_model)
+Architecture:
+  1. Spike encoder (conv or delta)  -> (T, B, D, L)
+  2. Transpose                      -> (T, B, L, D)
+  3. DataEmbeddingInverted          -> (T, B, D, d_model)
      Each of the D channels is embedded over its L-step history: Linear(L, d_model)
-  4. Stack of Block(SSA + MLP)      → (T, B, D, d_model)
+  4. Stack of Block(SSA + MLP)      -> (T, B, D, d_model)
      Self-attention runs across the D channel tokens (multivariate correlation)
-  5. Last step                      → (B, D, d_model)
-  6. Linear(d_model, pred_len)      → (B, D, pred_len) → transpose → (B, pred_len, D)
+  5. Last step                      -> (B, D, d_model)
+  6. Linear(d_model, pred_len)      -> (B, D, pred_len) -> transpose -> (B, pred_len, D)
 """
 
 import torch
@@ -39,10 +39,6 @@ def _make_lif(tau: float, common_thr: float = 1.0) -> neuron.LIFNode:
 
 class DataEmbeddingInverted(nn.Module):
     """Inverted channel-wise temporal embedding.
-
-    Maps each channel's L-step time series to a d_model-dim token via a
-    linear projection, BN, and LIF spike layer.  Follows the iTransformer
-    principle: treat variates as tokens rather than time steps.
 
     Input : (T, B, L, D) — L time steps, D channels
     Output: (T, B, D, d_model) — D channel tokens, each with d_model features
@@ -75,12 +71,12 @@ class iSpikformer(nn.Module):
         D:            Number of input/output channels (enc_in).
         pred_len:     Prediction horizon.
         tau:          LIF membrane time constant.
-        d_model:      Per-channel embedding dimension (mapped from ``alpha`` in args).
+        d_model:      Per-channel embedding dimension (mapped from alpha in args).
         d_ff:         Feedforward hidden size in MLP blocks (default: d_model * 4).
         heads:        Number of attention heads (must divide d_model).
         common_thr:   LIF firing threshold for all neurons.
         qk_scale:     Q·K scaling factor in SSA (default 0.125 = 1/8).
-        encoder_type: Spike encoder variant — ``'conv'`` or ``'delta'``.
+        encoder_type: Spike encoder variant — 'conv' or 'delta'.
         normalize:    RevIN-style per-instance normalization.
     """
 
@@ -104,7 +100,7 @@ class iSpikformer(nn.Module):
         self.normalize = normalize
         d_ff = d_ff or d_model * 4
 
-        # Spike encoder: (B, L, D) → (T, B, D, L)
+        # Spike encoder: (B, L, D) -> (T, B, D, L)
         if encoder_type == 'conv':
             self.spike_encoder = ConvEncoder(output_size=T, tau=tau)
         elif encoder_type == 'delta':
@@ -112,7 +108,7 @@ class iSpikformer(nn.Module):
         else:
             raise ValueError(f'Unknown encoder_type: {encoder_type!r}')
 
-        # Inverted embedding: (T, B, L, D) → (T, B, D, d_model)
+        # Inverted embedding: (T, B, L, D) -> (T, B, D, d_model)
         self.emb = DataEmbeddingInverted(input_len, d_model, tau, common_thr)
 
         # Transformer blocks: SSA + MLP over D channel tokens with d_model features.
@@ -166,7 +162,7 @@ class iSpikformer(nn.Module):
         for blk in self.attn_blocks:
             h = blk(h)                                                 # (T, B, D, d_model)
 
-        # Decode: last step→ project d_model → pred_len
+        # Decode: last step-> project d_model -> pred_len
         out = h[-1, :, :, :]                                          # (B, D, d_model)
         out = self.dense(out)                                          # (B, D, pred_len)
         out = out.transpose(-1, -2)                                    # (B, pred_len, D)

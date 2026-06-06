@@ -8,7 +8,7 @@ from torch import optim
 from torch.utils.data import DataLoader
 import warnings
 
-# --- SNN models (spikingjelly clock_driven backend) ---
+# SNN models (spikingjelly clock_driven backend)
 from models.SpikF import SpikF
 from models.iSpikformer import iSpikformer
 from models.SpikeRNN import SpikeRNN
@@ -18,12 +18,12 @@ from models.TSGRU import TSGRU
 from models.TSTCN import TSTCN
 from models.TSFormer import TSFormer
 
-# --- SNN models (spikingjelly activation_based backend, adapted from SeqSNN) ---
+# SNN models (spikingjelly activation_based backend, adapted from SeqSNN)
 from models.Spikformer import Spikformer
 from models.Spikingformer import Spikingformer
 from models.QKFormer import QKFormer
 
-# --- ANN baselines ---
+# ANN baselines
 from models.DLinear import Model as DLinear
 from models.ITransformer import Model as ITransformer
 
@@ -79,14 +79,13 @@ class Exp_ETT(Exp_Basic):
         self.test_loader = self._get_data(flag='test')
 
     def _build_model(self):
-        # --- resolve input dimension from dataset name ---
         if self.args.features == 'S':
             self.input_dim = 1
         elif self.args.features == 'M':
             _dim_map = {
                 'ETTh1': 7, 'ETTh2': 7, 'ETTm1': 7, 'ETTm2': 7,
                 'ECL': 321, 'electricity': 321,
-                'elec-txt': 321,              # electricity.txt (SeqSNN / LSTNET format)
+                'elec-txt': 321,              # electricity.txt 
                 'exchange': 8,
                 'traffic': 862,
                 'weather': 21,
@@ -95,20 +94,20 @@ class Exp_ETT(Exp_Basic):
                 'pems-bay': 325,
                 'solar-energy': 137, 'solar_AL': 137,
                 'Solar': 137,
-                'solar-txt': 137,             # solar_AL.txt via Dataset_TXT
+                'solar-txt': 137,             # solar_AL.txt 
             }
             self.input_dim = _dim_map.get(self.args.data, 1)
         else:
             self.input_dim = 1
 
-        # Inject enc_in/c_out so Model(configs) convention works
+        # Inject enc_in/c_out so Model(configs)
         self.args.enc_in = self.input_dim
         self.args.c_out = self.input_dim
 
         name = self.args.model
 
         # alpha is the main capacity knob: integer dimension for most models,
-        # float multiplier for SpikF. Cast here for all dimension uses.
+        # float multiplier for SpikF. 
         alpha_dim = int(self.args.alpha)
 
         if name in _NEW_STYLE_MODELS:
@@ -280,7 +279,6 @@ class Exp_ETT(Exp_Basic):
                 encoder_type=self.args.encoder_type,
             )
         else:
-            # Default: SpikF
             model = SpikF(
                 self.args.seq_len, self.args.patch_num, self.args.patch_dim,
                 self.args.T, self.args.levels, self.input_dim,
@@ -294,9 +292,9 @@ class Exp_ETT(Exp_Basic):
     def _get_data(self, flag):
         args = self.args
 
-        # CSV/custom datasets — 70/10/20 split (TSLib default)
-        # H5 traffic datasets (PEMS-BAY, METR-LA) — 60/20/20 split (SeqSNN)
-        # TXT sensor datasets (solar, electricity-SeqSNN) — 60/20/20 split (SeqSNN)
+        # CSV/custom datasets — 70/10/20 split 
+        # H5 traffic datasets (PEMS-BAY, METR-LA) — 60/20/20 split
+        # TXT sensor datasets (solar, electricity-SeqSNN) — 60/20/20 split 
         data_dict = {
             'ETTh1':      Dataset_ETT_hour,
             'ETTh2':      Dataset_ETT_hour,
@@ -304,18 +302,18 @@ class Exp_ETT(Exp_Basic):
             'ETTm2':      Dataset_ETT_minute,
             'weather':    Dataset_Custom,
             'ECL':        Dataset_Custom,
-            'electricity': Dataset_Custom,    # CSV version (ECL.csv)
+            'electricity': Dataset_Custom,    # CSV version 
             'Solar':      Solar,
-            'solar-energy': Solar,            # txt version via fixed Solar class
+            'solar-energy': Solar,            # txt version 
             'traffic':    Dataset_Custom,
             'exchange':   Dataset_Custom,
             'illness':    Dataset_Custom,
-            # H5 traffic datasets — adapted from SeqSNN
+            # H5 traffic datasets 
             'metr-la':    Dataset_H5,
             'pems-bay':   Dataset_H5,
-            # Plain-txt sensor datasets — adapted from SeqSNN
+            # Plain-txt sensor datasets 
             'solar-txt':  Dataset_TXT,        # solar_AL.txt direct
-            'elec-txt':   Dataset_TXT,        # electricity.txt (SeqSNN LSTNET format)
+            'elec-txt':   Dataset_TXT,        # electricity.txt 
         }
         Data = data_dict[self.args.data]
 

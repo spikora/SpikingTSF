@@ -11,17 +11,13 @@ Handles datasets that differ from the ETT/weather/ECL CSV family:
   Dataset_TXT  — solar-energy, electricity-SeqSNN (.txt comma-delimited, 60/20/20 split)
 
 Both classes expose the same interface as ETT_data_loader classes:
-  __getitem__ → (seq_x, seq_y)
+  __getitem__ -> (seq_x, seq_y)
   seq_x : (seq_len, D)          input window
   seq_y : (pred_len, D)         future horizon without overlap
 
 The 60/20/20 split matches SeqSNN's convention for these benchmarks.
 Window splitting is performed over the full set of valid forecast windows,
 matching SeqSNN's protocol more closely than the default ETT border split.
-Global per-sensor max-abs normalisation is applied before windowing to
-match SeqSNN's `normalize=2`; targets use raw future values without
-decoder overlap. Time features are intentionally not added here so the
-input dimensionality remains compatible with exp_ETT.py and run_long.py.
 """
 
 import os
@@ -51,33 +47,18 @@ class PerSensorMaxAbsScaler:
         return data * self.scale_
 
 
-# ---------------------------------------------------------------------------
-# H5 loader — PEMS-BAY, METR-LA
-# ---------------------------------------------------------------------------
 
 class Dataset_H5(Dataset):
     """
     Loads HDF5 traffic files (PEMS-BAY, METR-LA).
 
     File layout expected:
-      • pandas HDF5 written as a DataFrame
-      • Index is a DatetimeIndex (not stored in .values)
-      • Columns are sensor IDs; shape (T, N_sensors)
+      -- pandas HDF5 written as a DataFrame
+      -- Index is a DatetimeIndex (not stored in .values)
+      -- Columns are sensor IDs; shape (T, N_sensors)
 
-    Split: 60 % train / 20 % val / 20 % test over valid forecast windows
-    (SeqSNN convention). Targets contain only the raw prediction horizon,
-    without overlap.
-
-    Args:
-        root_path : directory containing the .h5 file
-        data_path : filename (e.g. 'metr-la.h5' or 'pems-bay.h5')
-        flag      : 'train' | 'val' | 'test'
-        size      : [seq_len, label_len, pred_len]
-        features  : 'M' multivariate | 'S' univariate | 'MS' multi→single
-        target    : column to predict (only used when features='S')
-        scale     : apply SeqSNN-style per-sensor max-abs scaling (default True)
-        train_ratio : fraction for training   (default 0.6)
-        test_ratio  : fraction for test       (default 0.2)
+    Split: 60 % train / 20 % val / 20 % test over valid forecast windows. 
+    Targets contain only the raw prediction horizon, without overlap.
     """
 
     def __init__(
@@ -118,20 +99,17 @@ class Dataset_H5(Dataset):
         self.scaler = PerSensorMaxAbsScaler()
         filepath = os.path.join(self.root_path, self.data_path)
 
-        # Read h5 — DataFrame with DatetimeIndex; .values gives (T, N_sensors)
         df = pd.read_hdf(filepath)
         if isinstance(df.index, pd.DatetimeIndex):
             raw = df.values.astype(np.float32)          # (T, N)
         else:
-            # Fallback: try reset_index and drop first column (timestamp)
             df = df.reset_index()
             raw = df.iloc[:, 1:].values.astype(np.float32)
 
         if self.features == 'S':
-            raw = raw[:, [0]]                            # univariate: first sensor
+            raw = raw[:, [0]]                          
 
         if self.scale:
-            # Match SeqSNN normalize=2 behavior: use each sensor's max abs value.
             self.scaler.fit(raw)
             scaled = self.scaler.transform(raw)
         else:
@@ -166,28 +144,22 @@ class Dataset_H5(Dataset):
         return self.scaler.inverse_transform(data)
 
 
-# ---------------------------------------------------------------------------
-# TXT loader — solar-energy, electricity (SeqSNN .txt format)
-# ---------------------------------------------------------------------------
 
 class Dataset_TXT(Dataset):
     """
     Loads plain comma-delimited .txt sensor files.
 
     File layout expected:
-      • No header row
-      • Comma-separated float values
-      • Shape (T, N_sensors) after loading
+      -- No header row
+      -- Comma-separated float values
+      -- Shape (T, N_sensors) after loading
 
     Examples:
       solar_AL.txt  — 137 solar-panel sensors, Alabama
-      electricity.txt — 321 electricity consumption sensors (LSTNET format)
+      electricity.txt — 321 electricity consumption sensors 
 
-    Split: 60 % train / 20 % val / 20 % test over valid forecast windows
-    (SeqSNN convention). Targets contain only the raw prediction horizon,
-    without overlap.
-
-    Args identical to Dataset_H5 except data_path is a .txt file.
+    Split: 60 % train / 20 % val / 20 % test over valid forecast windows. 
+    Targets contain only the raw prediction horizon, without overlap.
     """
 
     def __init__(
@@ -228,20 +200,19 @@ class Dataset_TXT(Dataset):
         self.scaler = PerSensorMaxAbsScaler()
         filepath = os.path.join(self.root_path, self.data_path)
 
-        # Headerless comma-delimited; try comma first, fall back to tab
+
         try:
             raw = np.loadtxt(filepath, delimiter=',', dtype=np.float32)
         except ValueError:
             raw = np.loadtxt(filepath, delimiter='\t', dtype=np.float32)
 
         if raw.ndim == 1:
-            raw = raw.reshape(-1, 1)                    # univariate edge-case
+            raw = raw.reshape(-1, 1)                   
 
         if self.features == 'S':
             raw = raw[:, [0]]
 
         if self.scale:
-            # Match SeqSNN normalize=2 behavior: use each sensor's max abs value.
             self.scaler.fit(raw)
             scaled = self.scaler.transform(raw)
         else:

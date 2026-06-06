@@ -6,29 +6,24 @@ Combines four SeqSNN-RPE Spikingformer variants into a single class via `attn_ty
   'xnor_gray' — XNOR + Gray-code Q/K augmentation; pe_type='conv' required
   'xnor_log'  — XNOR + log-distance integer bias; pe_type='conv' required
 
-Distinguishing feature vs Spikformer:
-  - SpikingSSA applies a pre-LIF gate to the input x BEFORE QKV projection
-    (instead of gating the output). The output has no final LIF.
-  - SpikingMLP applies lif → fc → bn for each sublayer (pre-LIF, not post-LIF).
-  - No init_lif after init_bn — each block's pre_lif handles the first gate.
 
 Architecture:
     (B, L, D)
-      → RevIN norm
-      → SpikeEncoder                      (T, B, D, L)
-      → transpose                         (T, B, L, D)
-      → [ConvPE if pe_type='conv']        (T, B, L, D)
-      → Linear(D → d_model) + init_bn    (T, B, L, d_model)  [no init_lif]
-      → SpikingBlock × blocks             (T, B, L, d_model)
+      -> RevIN norm
+      -> SpikeEncoder                      (T, B, D, L)
+      -> transpose                         (T, B, L, D)
+      -> [ConvPE if pe_type='conv']        (T, B, L, D)
+      -> Linear(D -> d_model) + init_bn    (T, B, L, d_model)  [no init_lif]
+      -> SpikingBlock x blocks             (T, B, L, d_model)
           standard: SpikingSSA + SpikingMLP
           xnor:     SpikingSSA_XNOR(attn_pe='none', scale -2) + SpikingMLP  [not in reference, added for completeness]
           xnor_gray:SpikingSSA_XNOR(attn_pe='gray', scale -4) + SpikingMLP
           xnor_log: SpikingSSA_XNOR(attn_pe='log',  scale -4) + SpikingMLP
-      → mean(T)                           (B, L, d_model)
-      → dropout
-      → mean(L)                           (B, d_model)
-      → Linear(d_model → pred_len×D) → reshape
-      → denorm
+      -> mean(T)                           (B, L, d_model)
+      -> dropout
+      -> mean(L)                           (B, d_model)
+      -> Linear(d_model -> pred_lenxD) -> reshape
+      -> denorm
     (B, pred_len, D)
 
 References:
@@ -62,7 +57,7 @@ class Spikingformer(nn.Module):
         pred_len:        Prediction horizon.
         tau:             LIF membrane time constant.
         d_model:         Embedding and attention dimension (must be divisible by heads).
-        d_ff:            Feedforward hidden dim (default: 4 × d_model).
+        d_ff:            Feedforward hidden dim (default: 4 x d_model).
         heads:           Attention heads (default 8).
         common_thr:      LIF firing threshold (default 1.0).
         qk_scale:        Q·K scale for standard SSA (default 0.125; ignored for XNOR).
@@ -112,7 +107,7 @@ class Spikingformer(nn.Module):
         self.normalize = normalize
         d_ff = d_ff or d_model * 4
 
-        # Spike encoder: (B, L, D) → (T, B, D, L)
+        # Spike encoder: (B, L, D) -> (T, B, D, L)
         if encoder_type == 'conv':
             self.spike_encoder = ConvEncoder(output_size=T, tau=tau)
         elif encoder_type == 'delta':

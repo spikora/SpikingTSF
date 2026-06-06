@@ -116,7 +116,7 @@ class StaticPE(nn.Module):
         self.register_buffer('pe', pe.unsqueeze(0).transpose(0, 1))  # (max_len, 1, d_model)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # x: (L, TB, D)  — called via PositionEmbedding after transpose
+        # x: (L, TB, D)  
         x = x + self.pe[:x.size(0), :]
         return self.dropout(x)
 
@@ -137,7 +137,7 @@ class ConvPE(nn.Module):
         self.dropout = nn.Dropout(p=dropout)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # x: (L, TB, D)  — called via PositionEmbedding after transpose
+        # x: (L, TB, D) 
         L, TB, D = x.shape
         x_feat = x.permute(1, 2, 0)                                               # (TB, D, L)
         x_feat = self.rpe_conv(x_feat)                                             # (TB, D, L)
@@ -190,7 +190,7 @@ class PositionEmbedding(nn.Module):
             raise ValueError(f'Unknown PE type: {pe_type}')
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # x: (T, B, L, D) → returns (T, B, L, D') where D'=D or D+num_pe_neuron
+        # x: (T, B, L, D) -> returns (T, B, L, D') where D'=D or D+num_pe_neuron
         if self.pe_type == 'learn':
             T, B, L, _ = x.shape
             pos = torch.arange(L, device=x.device)
@@ -205,23 +205,9 @@ class PositionEmbedding(nn.Module):
             return self.emb(x)
 
 
-# ---------------------------------------------------------------------------
-# XNOR attention utilities  (used by SSA_XNOR in spike_attention.py)
-# ---------------------------------------------------------------------------
 
 def generate_gray_code_matrix(M: torch.Tensor, num_bits: int = 10) -> torch.Tensor:
     """Append Gray-code position bits to Q or K tensors for XNOR_Gray attention.
-
-    Encodes L sequence positions as unique Gray-code bit vectors and concatenates
-    them to the last dimension of M, widening the feature space before XNOR
-    similarity. Codes are shared across T steps (position is sequence-only).
-
-    Args:
-        M:        (T, B, H, L, D_head) — per-head Q or K tensor.
-        num_bits: Number of Gray-code bits to append (default 10 → 2^10=1024 unique codes).
-
-    Returns:
-        (T, B, H, L, D_head + num_bits)
     """
     T, B, H, L, _ = M.shape
     indices = torch.arange(L, device=M.device)
@@ -235,18 +221,6 @@ def generate_gray_code_matrix(M: torch.Tensor, num_bits: int = 10) -> torch.Tens
 
 def create_symmetric_matrix(L: int, device=None) -> torch.Tensor:
     """Build a symmetric log-distance bias matrix for XNOR_Log attention.
-
-    Entry (i, j) = ceil(log2((L-1) / (|i-j| + 1))), clamped to ≥ 0.
-    Diagonal entries are the largest (distance=0 → log of (L-1)/1 = L-1),
-    decaying as positions diverge. Returned with broadcast-ready leading
-    singleton dims (1, 1, 1, L, L).
-
-    Args:
-        L:      Sequence length.
-        device: Target torch device (optional).
-
-    Returns:
-        Tensor of shape (1, 1, 1, L, L).
     """
     if L <= 1:
         matrix = torch.zeros((L, L), dtype=torch.int)
@@ -262,9 +236,6 @@ def create_symmetric_matrix(L: int, device=None) -> torch.Tensor:
     return matrix.unsqueeze(0).unsqueeze(0).unsqueeze(0)            # (1, 1, 1, L, L)
 
 
-# ---------------------------------------------------------------------------
-# CPGLinear — CPG-modulated input projection (used by SpikformerV 'cpg' variant)
-# ---------------------------------------------------------------------------
 
 class CPGLinear(nn.Module):
     """Position-aware input projection using Central Pattern Generator encoding.
@@ -273,21 +244,6 @@ class CPGLinear(nn.Module):
     the same binarized sinusoidal formula as NeuronPE (heaviside-thresholded
     sin/cos) but applied as an additive linear bias over position, not as a
     pre-projection PE step.
-
-    Replaces the (PositionEmbedding + nn.Linear) pair in the 'cpg' Spikformer
-    variant: the CPG signal is fused directly into the input projection so no
-    separate PE module is needed.
-
-    Args:
-        input_size:    Input channel dimension D.
-        output_size:   Output embedding dimension d_model.
-        num_pe_neuron: Number of CPG oscillator neurons (default 10).
-        w_max:         Frequency scale (default 10000.0, same as NeuronPE).
-        max_len:       Maximum supported sequence*step length T*L (default 50000).
-        dropout:       Dropout on input before projection (default 0.1).
-
-    Input:  (B, TL, D)  — B batches, TL = T*seq_len flattened positions, D channels.
-    Output: (B, TL, d_model)
     """
 
     def __init__(self, input_size: int, output_size: int,

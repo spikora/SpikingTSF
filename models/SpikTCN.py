@@ -10,15 +10,14 @@ Reference:
 Official project repository (SeqSNN):
     https://github.com/microsoft/SeqSNN  (SeqSNN/network/snn/spike_tcn.py)
 
-Architecture follows SeqSNN's SpikeTemporalConvNet2D, adapted to spikingjelly
-activation_based API and our codebase conventions:
-  1. Spike encoder (conv or delta)         → (T, B, D, L)
-  2. Optional positional encoding          → (T, B, D, L)
-  3. Channel-independent input projection  → (T*B*D, hidden_dim, L)
-  4. Stack of SpikeTCNBlock                → (T*B*D, hidden_dim, L)
-     dilated causal Conv1d → BN → single-step LIF, with SEW residual
-  5. Last causal position → out_proj       → (T*B*D, pred_len)
-  6. Reshape → mean T                      → (B, pred_len, D)
+Architecture:
+  1. Spike encoder (conv or delta)         -> (T, B, D, L)
+  2. Optional positional encoding          -> (T, B, D, L)
+  3. Channel-independent input projection  -> (T*B*D, hidden_dim, L)
+  4. Stack of SpikeTCNBlock                -> (T*B*D, hidden_dim, L)
+     dilated causal Conv1d -> BN -> single-step LIF, with SEW residual
+  5. Last causal position -> out_proj       -> (T*B*D, pred_len)
+  6. Reshape -> mean T                      -> (B, pred_len, D)
 """
 
 import torch
@@ -56,12 +55,6 @@ class Chomp1d(nn.Module):
 
 class SpikeTCNBlock(nn.Module):
     """One dilated causal-conv TCN block with two spiking LIF layers and SEW residual.
-
-    Operates on (T*B*D, channels, L) where T is folded into the batch dimension.
-    Single-step LIF is applied directly to the (T*B*D, C, L) tensor — each sample
-    in the batch (including each T replicate) is treated independently, so membrane
-    state does NOT persist across SNN time steps. This matches the paper's rule that
-    TCN membrane potentials reset at each time-series step, enabling parallel training.
     """
 
     def __init__(self, in_channels: int, out_channels: int,
@@ -106,18 +99,18 @@ class SpikeTCN(nn.Module):
     Args:
         input_len:      Sequence length (L = seq_len).
         T:              Number of SNN time steps.
-        blocks:         Number of TCN blocks (dilations: 2^0, 2^1, …, 2^(blocks-1)).
+        blocks:         Number of TCN blocks.
         D:              Number of input/output channels (enc_in).
         pred_len:       Prediction horizon.
         tau:            LIF membrane time constant.
-        hidden_dim:     TCN hidden channel size (mapped from ``alpha`` in args).
+        hidden_dim:     TCN hidden channel size (mapped from alpha in args).
         kernel_size:    Dilated causal conv kernel size (default 3).
-        encoder_type:   Spike encoder — ``'conv'`` or ``'delta'``.
-        pe_type:        Positional encoding type — ``'none'``, ``'learn'``,
-                        ``'static'``, ``'conv'``, ``'neuron'``, ``'random'``.
-                        Note: only ``pe_mode='add'`` is supported (``'concat'``
+        encoder_type:   Spike encoder — 'conv' or 'delta'.
+        pe_type:        Positional encoding type — 'none', 'learn',
+                        'static', 'conv', 'neuron', 'random'.
+                        Note: only pe_mode='add' is supported ('concat'
                         would change the channel-independent D dimension).
-        num_pe_neuron:  PE neurons for ``neuron``/``random`` PE in add mode.
+        num_pe_neuron:  PE neurons for 'neuron'/'random' PE in add mode.
         neuron_pe_scale: Frequency scale for neuron PE.
         normalize:      RevIN-style per-instance normalization.
     """
@@ -143,7 +136,7 @@ class SpikeTCN(nn.Module):
         self.pe_type = pe_type
         self.normalize = normalize
 
-        # Spike encoder: (B, L, D) → (T, B, D, L)
+        # Spike encoder: (B, L, D) -> (T, B, D, L)
         if encoder_type == 'conv':
             self.spike_encoder = ConvEncoder(output_size=T, tau=tau)
         elif encoder_type == 'delta':
@@ -162,7 +155,7 @@ class SpikeTCN(nn.Module):
                 num_steps=T,
             )
 
-        # Channel-independent input projection: 1 → hidden_dim
+        # Channel-independent input projection: 1 -> hidden_dim
         self.input_proj = nn.Conv1d(1, hidden_dim, kernel_size=1)
 
         # Stacked TCN blocks with exponentially growing dilation
@@ -172,7 +165,7 @@ class SpikeTCN(nn.Module):
             for i in range(blocks)
         ])
 
-        # Decoder: last causal position → pred_len, then mean over T
+        # Decoder: last causal position -> pred_len, then mean over T
         self.out_proj = nn.Linear(hidden_dim, pred_len)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -187,15 +180,15 @@ class SpikeTCN(nn.Module):
 
         B, L, D = x.shape
 
-        # Spike encoding: (B, L, D) → (T, B, D, L)
+        # Spike encoding: (B, L, D) -> (T, B, D, L)
         h = self.spike_encoder(x)
 
-        # Optional PE: (T, B, D, L) → transpose → (T, B, L, D) → PE → transpose back
+        # Optional PE: (T, B, D, L) -> transpose -> (T, B, L, D) -> PE -> transpose back
         if self.pe_type != 'none':
             h = self.pe(h.transpose(-1, -2)).transpose(-1, -2)    # (T, B, D, L)
 
         # Channel-independent TCN:
-        # (T, B, D, L) → (T*B*D, 1, L) → input_proj → (T*B*D, hidden_dim, L)
+        # (T, B, D, L) -> (T*B*D, 1, L) -> input_proj -> (T*B*D, hidden_dim, L)
         h = h.flatten(0, 2).unsqueeze(1)                          # (T*B*D, 1, L)
         h = self.input_proj(h)                                    # (T*B*D, hidden_dim, L)
 

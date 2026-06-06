@@ -4,22 +4,6 @@ Reference:
     arXiv:2503.05108 (TS-LIF paper)
     TS-LIF/TS-LIF/SeqSNN/network/snn/TSLIF.py (TSLIFNode class)
 
-Innovation over standard LIF:
-  - Two compartments: v1 (dendritic/'long') and v2 (somatic/'short')
-  - Dual-compartment charge dynamics with learnable decay and cross-coupling:
-        v1 ← d0·v1 + d1·x − yy·v2   (dendritic)
-        v2 ← d2·v2 + d3·x − kk·v1   (somatic)
-  - Dual spike output: s_s = ATan(v2−θ), s_l = ATan(v1−θ)
-  - Learnable scalar combination: spike = α_s·s_s + α_l·s_l
-  - Soft reset: v1 −= γ·s_l,  v2 −= θ·s_s
-
-Design choices vs. reference:
-  - alpha_s/alpha_l are scalar (not per-dim [1,D]) so the node works for any
-    input tensor shape — the reference had hardcoded dims (128 or 168) that are
-    dataset-specific and do not generalise.
-  - State v1/v2 is lazily initialised on first call and reset via reset(),
-    which is compatible with spikingjelly functional.reset_net().
-  - Uses spikingjelly surrogate.ATan() (same gradient as snntorch atan).
 
 Usage:
     node = TSLIFNode(v_threshold=1.0, gamma=0.5)
@@ -42,10 +26,6 @@ class TSLIFNode(MemoryModule):
     calls within the same forward pass and is reset via reset() or by
     spikingjelly's functional.reset_net(). Extends spikingjelly MemoryModule
     so functional.reset_net() recognises it without warnings.
-
-    Args:
-        v_threshold: Firing threshold θ for both compartments (default 1.0).
-        gamma:       Soft-reset coefficient for dendritic compartment (default 0.5).
     """
 
     def __init__(self, v_threshold: float = 1.0, gamma: float = 0.5):
@@ -54,9 +34,7 @@ class TSLIFNode(MemoryModule):
         self.gamma = gamma
         self.surrogate_fn = surrogate.ATan()
 
-        # Learnable decay factors: [d0, d1, d2, d3]
-        #   v1 ← d0·v1 + d1·x − yy·v2
-        #   v2 ← d2·v2 + d3·x − kk·v1
+
         self.decay_factor = nn.Parameter(torch.tensor([0.8, 0.2, 0.3, 0.7]))
         self.kk = nn.Parameter(torch.tensor([0.8]))   # soma→dendrite coupling
         self.yy = nn.Parameter(torch.tensor([0.1]))   # dendrite→soma coupling

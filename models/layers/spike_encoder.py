@@ -16,7 +16,7 @@ from spikingjelly.activation_based import surrogate, neuron
 
 
 class ConvEncoder(nn.Module):
-    """Conv2D encoder: (B, L, C) → (T, B, C, L)."""
+    """Conv2D encoder: (B, L, C) -> (T, B, C, L)."""
 
     def __init__(self, output_size: int, tau: float = 2.0, kernel_size: int = 3):
         super().__init__()
@@ -40,7 +40,7 @@ class ConvEncoder(nn.Module):
 
 
 class DeltaEncoder(nn.Module):
-    """Temporal delta encoder: (B, L, C) → (T, B, C, L)."""
+    """Temporal delta encoder: (B, L, C) -> (T, B, C, L)."""
 
     def __init__(self, output_size: int, tau: float = 2.0):
         super().__init__()
@@ -64,7 +64,7 @@ class DeltaEncoder(nn.Module):
 
 
 class RepeatEncoder(nn.Module):
-    """Repeat encoder: tile input T times then LIF; (B, L, C) → (T, B, C, L)."""
+    """Repeat encoder: tile input T times then LIF; (B, L, C) -> (T, B, C, L)."""
 
     def __init__(self, output_size: int, tau: float = 2.0):
         super().__init__()

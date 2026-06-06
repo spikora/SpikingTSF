@@ -5,19 +5,12 @@ Taken from Time-Series-Library (THUML, MIT License):
   Zeng et al., "Are Transformers Effective for Time Series Forecasting?", AAAI 2023.
   https://github.com/thuml/Time-Series-Library
 
-Used in SpikingTSF as the ANN reference baseline — no spiking neurons.
-Serves two purposes:
-  1. Verifies that the data pipeline and evaluation protocol are correct.
-  2. Provides a competitive linear baseline to put SNN results in context.
 """
 
 import torch
 from torch import nn
 
 
-# ---------------------------------------------------------------------------
-# Series decomposition helpers (self-contained, no external deps)
-# ---------------------------------------------------------------------------
 
 class MovingAvg(nn.Module):
     """Centered moving average with edge-padding to preserve length."""
@@ -48,20 +41,10 @@ class SeriesDecomp(nn.Module):
         return seasonal, trend
 
 
-# ---------------------------------------------------------------------------
-# DLinear model
-# ---------------------------------------------------------------------------
 
 class Model(nn.Module):
     """
     DLinear: one linear layer per component (seasonal + trend), channel-independent.
-
-    Args (from configs namespace):
-        seq_len    : input length L
-        pred_len   : forecast horizon H
-        enc_in     : number of input variables D
-        moving_avg : kernel size for trend extraction (default 25)
-        individual : if True, separate weights per variate (default False)
     """
 
     def __init__(self, configs):

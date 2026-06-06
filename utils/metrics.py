@@ -6,7 +6,7 @@ def RSE(pred, true):
     return np.sqrt(np.sum((true - pred) ** 2)) / np.sqrt(np.sum((true - true.mean(0)) ** 2))
 
 
-# Alias used in SeqSNN-RPE literature
+
 RRSE = RSE
 
 
@@ -52,17 +52,7 @@ def MSPE(pred, true):
 
 
 def R2(pred, true, eps: float = 1e-12):
-    """Element-wise R² averaged over all (channel, time-step) positions.
-
-    For each output position computes 1 - SS_res / (SS_tot + eps) where
-    SS is summed over the batch axis, then returns the mean across all
-    positions.  Matches the paper-style evaluation used in TS-LIF / SeqSNN
-    where each output dimension is treated independently.
-
-    Args:
-        pred: array (B, pred_len, D)
-        true: array (B, pred_len, D)
-        eps:  small constant to avoid division by zero
+    """Element-wise R2 averaged over all (channel, time-step) positions.
     """
     y_bar = true.mean(axis=0)           # (pred_len, D)
     ss_res = ((true - pred) ** 2).sum(axis=0)

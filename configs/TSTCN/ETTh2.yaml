@@ -1,6 +1,6 @@
 # TSTCN — ETTh2 configuration
 # Best params from Optuna search (100 trials, trial 52, val_mae=0.40909)
-# TSTCN = SpikTCN with LIFNode replaced by TSLIFNode (arXiv:2503.05108)
+
 
 model: TSTCN
 data: ETTh2
@@ -13,7 +13,7 @@ checkpoints: exp/run_ETT/
 # Forecasting window
 seq_len: 96
 label_len: 0
-# pred_len is swept in the shell script
+
 
 # SNN architecture
 T: 4

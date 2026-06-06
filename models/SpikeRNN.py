@@ -10,13 +10,13 @@ Reference:
 Official project repository:
     https://github.com/microsoft/SeqSNN
 
-Architecture follows SeqSNN's SpikeRNN network:
-  1. Spike encoder (conv or delta) → (T, B, D, L)
+Architecture:
+  1. Spike encoder (conv or delta) -> (T, B, D, L)
   2. Transpose to (T, B, L, D)
   3. Optional positional encoding
-  4. Linear input projection + init LIF → (T, B, L, hidden_dim)
+  4. Linear input projection + init LIF -> (T, B, L, hidden_dim)
   5. Stack of SpikeRNNCell (Linear + LIF) blocks
-  6. Decoder: Linear(hidden_dim→D) → BN → LIF → Linear(L→pred_len) → mean T → (B, pred_len, D)
+  6. Decoder: Linear(hidden_dim->D) -> BN -> LIF -> Linear(L->pred_len) -> mean T -> (B, pred_len, D)
 """
 
 import torch
@@ -40,8 +40,6 @@ class SpikeRNNCell(nn.Module):
     """Single recurrent spiking cell: Linear + multi-step LIF.
 
     Input/output shape: (T, B, L, C).
-    The LIF membrane potential persists across SNN time steps T, acting as
-    the recurrent hidden state.
     """
 
     def __init__(self, input_size: int, output_size: int, tau: float = _TAU):
@@ -100,7 +98,7 @@ class SpikeRNN(nn.Module):
         self.pe_type = pe_type
         self.normalize = normalize
 
-        # Spike encoder: (B, L, D) → (T, B, D, L)
+        # Spike encoder: (B, L, D) -> (T, B, D, L)
         if encoder_type == 'conv':
             self.spike_encoder = ConvEncoder(output_size=T, tau=tau)
         elif encoder_type == 'delta':
@@ -120,7 +118,7 @@ class SpikeRNN(nn.Module):
                 num_steps=T,
             )
 
-        # Input projection: D (possibly widened by concat PE) → hidden_dim
+        # Input projection: D (possibly widened by concat PE) -> hidden_dim
         proj_in = D + num_pe_neuron if (pe_type in ('neuron', 'random') and pe_mode == 'concat') else D
         self.input_proj = nn.Linear(proj_in, hidden_dim)
         self.init_lif = _make_lif(tau)
@@ -163,7 +161,7 @@ class SpikeRNN(nn.Module):
         for cell in self.net:
             h = cell(h)                                    # (T, B, L, hidden_dim)
 
-        # Decoder: hidden_dim → D → BN → LIF → L → pred_len
+        # Decoder: hidden_dim -> D -> BN -> LIF -> L -> pred_len
         h = self.dense1(h)                                 # (T, B, L, D)
         h = h.flatten(0, 1).permute(0, 2, 1)              # (TB, D, L)
         h = self.bn(h)

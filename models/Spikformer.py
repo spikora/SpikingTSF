@@ -11,29 +11,25 @@ Assertions enforced at init:
   - XNOR variants require pe_type == 'conv'
   - CPG variant requires pe_type == 'none'
 
-init_bn is applied for XNOR variants (matching spikformer_xnor*.py); standard and
-CPG skip init_bn (matching spikformer.py and spikformer_CPG.py respectively).
 
-For the 'standard' variant, pe_mode='concat' with pe_type in {'neuron','random'}
-widens the input linear to D + num_pe_neuron → d_model (matching spikformer.py).
 
 Architecture (shared across all variants):
     (B, L, D)
-      → RevIN norm
-      → SpikeEncoder                      (T, B, D, L)
-      → transpose                         (T, B, L, D)
-      → [PE if pe_type != 'none']         (T, B, L, D or D+num_pe_neuron)
-      → InputEmbed [+ BN for XNOR] + LIF (T, B, L, d_model)
-          standard/xnor*: Linear(D' → d_model)  [D' widened for concat PE]
-          cpg:            CPGLinear(D → d_model) [no BN; position fused inside]
-      → Block × blocks                    (T, B, L, d_model)
+      -> RevIN norm
+      -> SpikeEncoder                      (T, B, D, L)
+      -> transpose                         (T, B, L, D)
+      -> [PE if pe_type != 'none']         (T, B, L, D or D+num_pe_neuron)
+      -> InputEmbed [+ BN for XNOR] + LIF (T, B, L, d_model)
+          standard/xnor*: Linear(D' -> d_model)  [D' widened for concat PE]
+          cpg:            CPGLinear(D -> d_model) [no BN; position fused inside]
+      -> Block x blocks                    (T, B, L, d_model)
           standard/xnor*: Block(SSA or SSA_XNOR, MLP)
           cpg:            Block(SSA, MLPCPG)
-      → mean(T)                           (B, L, d_model)
-      → dropout
-      → mean(L)                           (B, d_model)
-      → Linear(d_model → pred_len×D) → reshape
-      → denorm
+      -> mean(T)                           (B, L, d_model)
+      -> dropout
+      -> mean(L)                           (B, d_model)
+      -> Linear(d_model -> pred_len*D) -> reshape
+      -> denorm
     (B, pred_len, D)
 
 References:
@@ -68,7 +64,7 @@ class Spikformer(nn.Module):
         pred_len:        Prediction horizon.
         tau:             LIF membrane time constant.
         d_model:         Attention / embedding dimension (must be divisible by heads).
-        d_ff:            Feedforward hidden dim (default: 4 × d_model).
+        d_ff:            Feedforward hidden dim (default: 4 x d_model).
         heads:           Number of attention heads (default 8).
         common_thr:      LIF firing threshold (default 1.0).
         qk_scale:        Q·K scale for standard SSA (default 0.125); ignored for XNOR.
@@ -131,7 +127,7 @@ class Spikformer(nn.Module):
         self.normalize = normalize
         d_ff = d_ff or d_model * 4
 
-        # Spike encoder: (B, L, D) → (T, B, D, L)
+        # Spike encoder: (B, L, D) -> (T, B, D, L)
         if encoder_type == 'conv':
             self.spike_encoder = ConvEncoder(output_size=T, tau=tau)
         elif encoder_type == 'delta':
@@ -142,7 +138,7 @@ class Spikformer(nn.Module):
         # Positional encoding
         # XNOR variants: conv PE (required)
         # standard: any pe_type; pe_mode='concat' widens D for neuron/random
-        # cpg: no PE (CPGLinear handles position internally)
+        # cpg: no PE 
         if pe_type != 'none':
             _pe_mode = 'add' if attn_type in _XNOR_TYPES else pe_mode
             self.pe = PositionEmbedding(
@@ -233,7 +229,7 @@ class Spikformer(nn.Module):
 
         B = x.shape[0]
 
-        # Spike encoding: (B, L, D) → (T, B, D, L) → (T, B, L, D)
+        # Spike encoding: (B, L, D) -> (T, B, D, L) -> (T, B, L, D)
         x = self.spike_encoder(x)
         x = x.transpose(-2, -1)                                        # (T, B, L, D)
         T, _, L, _ = x.shape

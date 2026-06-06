@@ -8,7 +8,7 @@ When using a specific model, please cite both SpikingTSF and the corresponding s
 
 | Model | Type | Spike? | Source Paper | Source Repository | File in Repo | Status |
 |-------|------|:------:|-------------|-------------------|-------------|--------|
-| SpikF | Transformer (freq. domain) | ✅ | [Wu et al., ICML 2025](https://raw.githubusercontent.com/mlresearch/v267/main/assets/wu25m/wu25m.pdf) | [WWJ-creator/SpikF](https://github.com/WWJ-creator/SpikF) | `models/SpikF.py` | Runnable, ETTh1+ETTh2+ETTm1+ETTm2 |
+| SpikF | Transformer (freq. domain) | ✅ | [Wu et al., ICML 2025](https://raw.githubusercontent.com/mlresearch/v267/main/assets/wu25m/wu25m.pdf) | [WWJ-creator/SpikF](https://github.com/WWJ-creator/SpikF) | `models/SpikF.py` | Runnable, ETTh1+ETTh2 |
 | Spikformer | Transformer (spike-driven SA) | ✅ | [SeqSNN, NeurIPS 2025](https://arxiv.org/abs/2501.16745) | [microsoft/SeqSNN](https://github.com/microsoft/SeqSNN) | `models/Spikformer.py` | Runnable, ETTh1 |
 | Spikingformer | Transformer (pre-LIF) | ✅ | [SeqSNN, NeurIPS 2025](https://arxiv.org/abs/2501.16745) | [microsoft/SeqSNN](https://github.com/microsoft/SeqSNN) | `models/Spikingformer.py` | Runnable, ETTh1+ETTh2 verified |
 | QKFormer | Transformer (token-level Q/K attn) | ✅ | [SeqSNN, NeurIPS 2025](https://arxiv.org/abs/2501.16745) | [microsoft/SeqSNN](https://github.com/microsoft/SeqSNN) | `models/QKFormer.py` | Runnable, results pending |

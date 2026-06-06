@@ -4,36 +4,20 @@ Reference:
     arXiv:2503.05108 (TS-LIF paper)
     TS-LIF/TS-LIF/SeqSNN/network/snn/spike_tcn.py (SpikeTemporalConvNet2D class)
 
-Adaptation of SpikeTCN (models/SpikTCN.py) that replaces every spikingjelly
-single-step LIFNode with TSLIFNode — the two-compartment dual-spike neuron.
-All other architectural choices (Conv1d, channel-independent pipeline, dilated
-causal convolutions, SEW residual) follow our existing SpikeTCN adaptation.
 
-Key differences from SpikeTCN:
-  - SpikeTCNBlock.lif1/lif2/res_lif → TSLIFNode() (were step_mode='s' LIFNode)
-  - functional.reset_net(self) called at start of forward() to reset TSLIFNode
-    membrane state (v1, v2) between batches.
-
-Note on TSLIFNode in TCN:
-  In SpikeTCN, the single-step LIF was memoryless per call (step_mode='s'),
-  acting as a pure surrogate threshold. With TSLIFNode, each block's neuron
-  accumulates two-compartment state across the sequential block calls within
-  one forward pass. This gives the TCN cross-block temporal memory — closer to
-  the TS-LIF paper's intent of richer temporal dynamics at each spiking site.
-
-Architecture (same pipeline as SpikeTCN):
+Architecture:
     (B, L, D)
-      → RevIN norm
-      → SpikeEncoder                    (T, B, D, L)
-      → [optional PE]
-      → flatten + unsqueeze             (T*B*D, 1, L)
-      → Conv1d(1→hidden)                (T*B*D, hidden, L)
-      → TSTCNBlock × blocks             (T*B*D, hidden, L)
-          causal Conv1d → BN → TSLIFNode, SEW residual with TSLIFNode
-      → last causal position            (T*B*D, hidden)
-      → Linear(hidden→pred_len)         (T*B*D, pred_len)
-      → reshape → mean T                (B, pred_len, D)
-      → denorm
+      -> RevIN norm
+      -> SpikeEncoder                    (T, B, D, L)
+      -> [optional PE]
+      -> flatten + unsqueeze             (T*B*D, 1, L)
+      -> Conv1d(1->hidden)                (T*B*D, hidden, L)
+      -> TSTCNBlock x blocks             (T*B*D, hidden, L)
+          causal Conv1d -> BN -> TSLIFNode, SEW residual with TSLIFNode
+      -> last causal position            (T*B*D, hidden)
+      -> Linear(hidden->pred_len)         (T*B*D, pred_len)
+      -> reshape -> mean T                (B, pred_len, D)
+      -> denorm
 """
 
 import torch
@@ -56,10 +40,6 @@ class Chomp1d(nn.Module):
 
 class TSTCNBlock(nn.Module):
     """One dilated causal-conv TCN block with TSLIFNode neurons and SEW residual.
-
-    Operates on (T*B*D, channels, L). TSLIFNode is applied per-block call;
-    state (v1, v2) accumulates across sequential block calls within one
-    forward pass, then is reset by functional.reset_net() before the next.
     """
 
     def __init__(self, in_channels: int, out_channels: int,
@@ -108,11 +88,11 @@ class TSTCN(nn.Module):
         tau:            LIF time constant (used by encoder only).
         hidden_dim:     TCN hidden channel size (mapped from ``alpha`` in args).
         kernel_size:    Dilated causal conv kernel size (default 3).
-        encoder_type:   Spike encoder — ``'conv'`` or ``'delta'``.
-        pe_type:        Positional encoding — ``'none'``, ``'learn'``,
-                        ``'static'``, ``'conv'``, ``'neuron'``, ``'random'``.
-                        Only ``'add'`` mode is supported (concat changes D).
-        num_pe_neuron:  PE neurons for ``neuron``/``random`` PE (default 10).
+        encoder_type:   Spike encoder — 'conv' or 'delta'.
+        pe_type:        Positional encoding — 'none', 'learn',
+                        'static', 'conv', 'neuron', 'random'.
+                        Only 'add' mode is supported (concat changes D).
+        num_pe_neuron:  PE neurons for 'neuron'/'random' PE (default 10).
         neuron_pe_scale: Frequency scale for neuron PE (default 1000.0).
         normalize:      RevIN-style instance normalization (default True).
     """

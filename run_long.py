@@ -17,7 +17,7 @@ parser = argparse.ArgumentParser(description='SpikingTSF — long-term forecasti
 parser.add_argument('--config', type=str, default=None,
                     help='path to YAML config (e.g. configs/SpikF/ETTh1.yaml)')
 
-# ── Model ──────────────────────────────────────────────────────────────────
+# Model
 parser.add_argument('--model', type=str, default='SpikF',
                     choices=[
                         # TS-LIF two-compartment models
@@ -32,13 +32,13 @@ parser.add_argument('--model', type=str, default='SpikF',
                     ],
                     help='model name')
 
-# ── Dataset ────────────────────────────────────────────────────────────────
+# Dataset
 parser.add_argument('--data', type=str, default='ETTh1',
                     choices=['ETTh1', 'ETTh2', 'ETTm1', 'ETTm2', 'ECL', 'traffic',
                              'weather', 'electricity', 'metr-la', 'pems-bay',
                              'solar-energy', 'exchange',
-                             'solar-txt',   # solar_AL.txt via Dataset_TXT
-                             'elec-txt',    # electricity.txt via Dataset_TXT (SeqSNN format)
+                             'solar-txt',   # solar_AL.txt 
+                             'elec-txt',    # electricity.txt 
                              ])
 parser.add_argument('--root_path', type=str, default='./datasets/long/')
 parser.add_argument('--data_path', type=str, default='ETTh1.csv')
@@ -46,18 +46,18 @@ parser.add_argument('--features', type=str, default='M', choices=['S', 'M', 'MS'
 parser.add_argument('--target', type=str, default='OT')
 parser.add_argument('--checkpoints', type=str, default='exp/run_ETT/')
 
-# ── Forecasting task ───────────────────────────────────────────────────────
+# Forecasting task
 parser.add_argument('--seq_len', type=int, default=96)
 parser.add_argument('--pred_len', type=int, default=336)
 parser.add_argument('--label_len', type=int, default=48)
 
-# ── SNN core hyperparameters ──────────────────────────────────────────────
+# SNN core hyperparameters
 parser.add_argument('--T', type=int, default=16, help='SNN time steps')
 parser.add_argument('--tau', type=float, default=2.0, help='LIF membrane time constant')
 parser.add_argument('--levels', type=int, default=2,
                     help='number of blocks / layers (maps to "blocks" in models)')
 
-# ── Dimension / capacity hyperparameters ─────────────────────────────────
+# Dimension / capacity hyperparameters
 # alpha: main capacity knob — maps to d_model for transformer-family models
 #        and to hidden_dim for RNN/TCN-family models.
 # SpikF uses it as a float multiplier; all others expect an integer dimension.
@@ -72,7 +72,7 @@ parser.add_argument('--patch_dim', type=int, default=32,
 parser.add_argument('--hidden_dim', type=int, default=720,
                     help='dense/decoder hidden size (SpikF)')
 
-# ── Transformer / attention hyperparameters ───────────────────────────────
+# Transformer / attention hyperparameters 
 parser.add_argument('--n_heads', type=int, default=8,
                     help='number of attention heads')
 parser.add_argument('--d_ff', type=int, default=None,
@@ -87,12 +87,12 @@ parser.add_argument('--attn_type', type=str, default='standard',
 parser.add_argument('--gray_bits', type=int, default=10,
                     help='bit-width for Gray-code attention (xnor_gray / xnor_log)')
 
-# ── Spike encoder ─────────────────────────────────────────────────────────
+# Spike encoder
 parser.add_argument('--encoder_type', type=str, default='conv',
                     choices=['conv', 'delta', 'repeat'],
                     help='spike encoder type')
 
-# ── Positional encoding ───────────────────────────────────────────────────
+# Positional encoding
 parser.add_argument('--pe_type', type=str, default='none',
                     choices=['none', 'learn', 'static', 'conv', 'neuron', 'random'],
                     help='positional encoding type (SeqSNN-family models)')
@@ -104,7 +104,7 @@ parser.add_argument('--num_pe_neuron', type=int, default=10,
 parser.add_argument('--neuron_pe_scale', type=float, default=1000.0,
                     help='frequency scale for neuron PE')
 
-# ── ANN / general architecture hyperparameters ────────────────────────────
+# ANN / general architecture hyperparameters 
 parser.add_argument('--kernel_size', type=int, default=3,
                     help='dilated conv kernel size (SpikTCN / TSTCN)')
 parser.add_argument('--dropout', type=float, default=0.1)
@@ -123,7 +123,7 @@ parser.add_argument('--d_layers', type=int, default=1,
 parser.add_argument('--factor', type=int, default=1,
                     help='attention factor (new-style models)')
 
-# ── Optimizer ─────────────────────────────────────────────────────────────
+# Optimizer
 parser.add_argument('--optimizer', type=str, default='Adam',
                     choices=['Adam', 'AdamW', 'SGD', 'RMSprop'],
                     help='optimizer class (torch.optim.*)')
@@ -132,7 +132,7 @@ parser.add_argument('--weight_decay', type=float, default=0.0,
 parser.add_argument('--grad_clip', type=float, default=0.0,
                     help='max gradient norm for clipping (0 = disabled)')
 
-# ── LR scheduler ──────────────────────────────────────────────────────────
+# LR scheduler
 parser.add_argument('--scheduler', type=str, default='cosine',
                     choices=['cosine', 'step', 'none'],
                     help='learning rate scheduler')
@@ -143,7 +143,7 @@ parser.add_argument('--scheduler_step', type=int, default=1,
 parser.add_argument('--scheduler_gamma', type=float, default=0.5,
                     help='multiplicative decay factor for StepLR')
 
-# ── Training ───────────────────────────────────────────────────────────────
+# Training
 parser.add_argument('--cols', type=str, nargs='+',
                     help='specific columns to select from dataset')
 parser.add_argument('--num_workers', type=int, default=1)
@@ -161,7 +161,7 @@ parser.add_argument('--itr', type=int, default=3,
 parser.add_argument('--save', type=int, default=0,
                     help='save prediction arrays to disk (1=yes)')
 
-# ── Hardware ───────────────────────────────────────────────────────────────
+# Hardware
 parser.add_argument('--gpu', type=int, default=0, help='CUDA device index')
 
 # Load YAML config and use as defaults (CLI args still override)
@@ -171,12 +171,10 @@ if _pre_args.config is not None:
     parser.set_defaults(**_cfg)
 
 args = parser.parse_args()
-args.rank = args.gpu   # alias used internally by Exp_Basic / exp_ETT
+args.rank = args.gpu  
 
 
-# Seeds chosen for good statistical independence: 42 (de-facto ML default),
-# 1234 (common baseline), 3407 ("torch.manual_seed(3407) is all you need"),
-# 100, 999 (spread far from the first three for 5-run mode).
+
 _SEEDS = [42, 1234, 3407]
 
 _METRIC_KEYS = ['mae', 'mse', 'rmse', 'rse', 'r2', 'mape', 'mspe', 'corr']
@@ -197,7 +195,6 @@ def main(rank):
     args.rank = rank
     num_runs = args.itr
 
-    # For a single run, respect --random_seed; for multi-run use the preset list.
     if num_runs == 1:
         seeds = [args.random_seed]
     else:
@@ -241,7 +238,6 @@ def main(rank):
         for k in _METRIC_KEYS:
             all_metrics[k].append(m[k])
 
-    # ── Final summary ──────────────────────────────────────────────────────
     print(f'\n{"="*60}')
     print(f'  Final Results  ({num_runs} run{"s" if num_runs > 1 else ""}, '
           f'seeds={seeds})')

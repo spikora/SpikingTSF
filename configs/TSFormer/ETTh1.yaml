@@ -12,20 +12,20 @@ checkpoints: exp/run_ETT/
 # Forecasting window
 seq_len: 96
 label_len: 0
-# pred_len is swept in the shell script
+
 
 # SNN architecture
 T: 4
 tau: 1.8452705998528411
 levels: 2
-alpha: 128              # → d_model inside exp_ETT
+alpha: 128              # d_model inside exp_ETT
 encoder_type: conv
 
-# Fixed architecture (not tuned)
+# Fixed architecture 
 n_heads: 8
 common_thr: 1.0
 qk_scale: 0.125
-# d_ff omitted → auto = d_model × 4 = 512
+# d_ff omitted -> auto = d_model x 4 = 512
 
 # Training
 lr: 0.003824798473063481

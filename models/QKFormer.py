@@ -1,6 +1,6 @@
 """QKFormer — token-level Q/K spiking transformer with optional XNOR stage-3 attention.
 
-Combines three SeqSNN-RPE QKFormer variants into a single class via `attn_type`:
+Combines three SeqSNN-RPE QKFormer variants into a single class via 'attn_type':
   'standard'  — all stages use standard dot-product or Token-QK attention
   'xnor_gray' — stage-3 SSA uses XNOR + Gray-code Q/K; pe_type='conv' required
   'xnor_log'  — stage-3 SSA uses XNOR + log-distance bias; pe_type='conv' required
@@ -11,25 +11,24 @@ Architecture (3-stage pipeline):
   Stage 3 (blocks-2): SpikingBlock — SpikingSSA or SpikingSSA_XNOR
 
   Token_QK_Attention mechanism:
-    Q, K projections → Q summed over feature dim (→ scalar per position) →
-    spike gate via attn_lif → elementwise multiply with K → project output.
-    Complexity O(L·D) vs O(L²) for full attention — efficient for long sequences.
+    Q, K projections -> Q summed over feature dim (-> scalar per position) ->
+    spike gate via attn_lif -> elementwise multiply with K -> project output.
 
     (B, L, D)
-      → RevIN norm
-      → SpikeEncoder                       (T, B, D, L)
-      → transpose                          (T, B, L, D)
-      → [ConvPE if pe_type='conv']         (T, B, L, D)
-      → Linear(D → d_model) + init_bn     (T, B, L, d_model)
-      → TokenQKBlock × 2 (stages 1-2)     (T, B, L, d_model)
-      → SpikingBlock × (blocks-2) (stage3)(T, B, L, d_model)
+      -> RevIN norm
+      -> SpikeEncoder                       (T, B, D, L)
+      -> transpose                          (T, B, L, D)
+      -> [ConvPE if pe_type='conv']         (T, B, L, D)
+      -> Linear(D -> d_model) + init_bn     (T, B, L, d_model)
+      -> TokenQKBlock x 2 (stages 1-2)     (T, B, L, d_model)
+      -> SpikingBlock x (blocks-2) (stage3)(T, B, L, d_model)
           standard:  SpikingSSA + SpikingMLP
           xnor_gray: SpikingSSA_XNOR(attn_pe='gray') + SpikingMLP
           xnor_log:  SpikingSSA_XNOR(attn_pe='log')  + SpikingMLP
-      → mean(T)                            (B, L, d_model)
-      → dropout → mean(L)                  (B, d_model)
-      → Linear(d_model → pred_len×D)
-      → denorm
+      -> mean(T)                            (B, L, d_model)
+      -> dropout -> mean(L)                  (B, d_model)
+      -> Linear(d_model -> pred_len×D)
+      -> denorm
     (B, pred_len, D)
 
 References:
@@ -62,13 +61,6 @@ def _make_lif(tau, common_thr=1.0):
 
 class TokenQKAttention(nn.Module):
     """Token-level Q/K attention with no V matrix. Input/output: (T, B, L, D).
-
-    Computes a scalar attention token per position by summing Q over the feature
-    dimension, then spike-gates the result and multiplies elementwise with K.
-    Complexity O(L·D) per layer — no L² attention matrix.
-
-    Q/K BN is applied on the D dimension after transposing to (T, B, D, L),
-    preserving the channel-normalisation semantics from the reference.
     """
 
     def __init__(self, dim: int, heads: int, tau: float, common_thr: float = 1.0):
@@ -98,7 +90,7 @@ class TokenQKAttention(nn.Module):
         T, B, L, D = x.shape
         tb = x.flatten(0, 1)                                          # (TB, L, D)
 
-        # Q path: Linear → BN on D-axis → LIF → per-head reshape
+        # Q path: Linear -> BN on D-axis -> LIF -> per-head reshape
         q = self.q_linear(tb)                                         # (TB, L, D)
         q = self.q_bn(q.transpose(-1, -2)).reshape(T, B, D, L)       # (T, B, D, L)
         q = self.q_lif(q)                                             # (T, B, D, L)
@@ -110,7 +102,7 @@ class TokenQKAttention(nn.Module):
         k = self.k_lif(k)
         k = k.reshape(T, B, self.heads, D // self.heads, L)          # (T, B, H, d, L)
 
-        # Token attention: sum Q over feature dim → (T,B,H,1,L), spike-gate, mul K
+        # Token attention: sum Q over feature dim -> (T,B,H,1,L), spike-gate, mul K
         q = torch.sum(q, dim=3, keepdim=True)                        # (T, B, H, 1, L)
         attn = self.attn_lif(q)                                      # (T, B, H, 1, L)
         x = attn * k                                                  # (T, B, H, d, L)
@@ -148,12 +140,12 @@ class QKFormer(nn.Module):
     Args:
         input_len:   Sequence length (L = seq_len).
         T:           Number of SNN time steps.
-        blocks:      Total transformer blocks. Must be ≥ 3: 2 token-QK stages + (blocks-2) spiking stages.
+        blocks:      Total transformer blocks. Must be > 3: 2 token-QK stages + (blocks-2) spiking stages.
         D:           Number of input/output channels (enc_in).
         pred_len:    Prediction horizon.
         tau:         LIF membrane time constant.
         d_model:     Embedding and attention dimension (must be divisible by heads).
-        d_ff:        Feedforward hidden dim (default: 4 × d_model).
+        d_ff:        Feedforward hidden dim (default: 4 x d_model).
         heads:       Attention heads (default 8).
         common_thr:  LIF firing threshold (default 1.0).
         qk_scale:    Q·K scale for SpikingSSA in stage 3 (default 0.125; ignored for XNOR).

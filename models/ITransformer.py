@@ -9,25 +9,6 @@ Adapted from SeqSNN (Microsoft, MIT License):
 Which itself is based on:
   Liu et al., "iTransformer: Inverted Transformers Are Effective for Time Series Forecasting",
   ICLR 2024.  https://github.com/thuml/iTransformer  (MIT License)
-
-Key idea: treat each variate as a token (invert the Transformer's usual role of time-step tokens).
-This makes attention operate over the D-dimensional variate axis rather than the L-dimensional
-time axis, allowing the model to capture inter-variate dependencies at low cost.
-
-Adaptation notes:
-  - Per-sample instance normalization follows TSLib unified evaluation protocol
-  - Output projection included inside the model: (B, pred_len, D) returned directly
-  - No timestamp covariates — pure value-based embedding
-
-Architecture:
-    Input (B, L, D)
-      ↓  per-sample instance norm
-    DataEmbedding_inverted: (B, L, D) → (B, D, d_model)   [variates as tokens]
-      ↓  N × EncoderLayer (full attention over D tokens)
-    Linear(d_model → pred_len) applied per variate → (B, D, pred_len)
-    Permute → (B, pred_len, D)
-      ↓  denorm
-    Output (B, pred_len, D)
 """
 
 from math import sqrt
@@ -36,10 +17,6 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-
-# ---------------------------------------------------------------------------
-# Attention internals
-# ---------------------------------------------------------------------------
 
 class FullAttention(nn.Module):
     def __init__(self, mask_flag=False, scale=None, dropout=0.1):
@@ -99,9 +76,6 @@ class EncoderLayer(nn.Module):
         return self.norm2(x + y)
 
 
-# ---------------------------------------------------------------------------
-# Full model
-# ---------------------------------------------------------------------------
 
 class Model(nn.Module):
     """
@@ -153,7 +127,7 @@ class Model(nn.Module):
 
         B, L, D = x.shape
 
-        # Invert: variates become tokens — (B, D, L) → (B, D, d_model)
+        # Invert: variates become tokens — (B, D, L) -> (B, D, d_model)
         x = x.permute(0, 2, 1)          # (B, D, L)
         x = self.value_embedding(x)      # (B, D, d_model)
         x = self.emb_dropout(x)

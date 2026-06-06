@@ -9,9 +9,9 @@ Classes (spikingjelly LIFNode, step_mode='m'):
   SSA          — standard dot-product spiking attention (qk_scale fixed)
   SSA_XNOR     — XNOR spiking attention with learnable scale; supports three
                   positional-bias modes via attn_pe:
-                    'none'  — base XNOR (scale init -2, normalise by min-shift)
-                    'gray'  — Gray-code Q/K augmentation (scale init -4, no min-shift)
-                    'log'   — log-distance symmetric bias (scale init -4, no min-shift)
+                    'none'  — base XNOR 
+                    'gray'  — Gray-code Q/K augmentation
+                    'log'   — log-distance symmetric bias 
   MLP          — spiking two-layer MLP
   Block        — SSA + MLP residual block; accepts attn_cls kwarg to swap in SSA_XNOR
   SpikingSSA, SpikingSSA_XNOR, SpikingMLP, SpikingBlock — pre-LIF Spikingformer blocks
@@ -38,7 +38,7 @@ _BACKEND = 'torch'
 
 
 class SSA(nn.Module):
-    """Spiking Self-Attention. Input: (T, B, L, D) → Output: (T, B, L, D)."""
+    """Spiking Self-Attention. Input: (T, B, L, D) -> Output: (T, B, L, D)."""
 
     def __init__(self, length, tau, common_thr, dim, heads=8, qk_scale=0.125):
         super().__init__()
@@ -101,7 +101,7 @@ class SSA(nn.Module):
 
 
 class MLP(nn.Module):
-    """Spiking MLP. Input: (T, B, L, D) → Output: (T, B, L, D)."""
+    """Spiking MLP. Input: (T, B, L, D) -> Output: (T, B, L, D)."""
 
     def __init__(self, length, tau, common_thr, in_features, hidden_features, out_features=None):
         super().__init__()
@@ -136,9 +136,6 @@ class MLP(nn.Module):
 
 class MLPCPG(nn.Module):
     """Spiking MLP with CPGLinear for fc1/fc2 — used by the CPG Spikformer variant.
-
-    CPGLinear expects (B, TL, D); this class reshapes (T, B, L, D) ↔ (B, TL, D)
-    around each linear layer, faithfully matching SeqSNN-RPE spikformer_CPG.py MLP.
     Input/output: (T, B, L, D).
     """
 
@@ -186,13 +183,12 @@ class SSA_XNOR(nn.Module):
         sim(q, k) = D - Σq - Σk + 2·(q·k)
 
     Three positional-bias modes (attn_pe):
-      'none'  — base XNOR; similarity shifted by per-map min, then scaled by
-                sigmoid(scale). scale initialised to -2.0.
+      'none'  — base XNOR;
       'gray'  — Q and K are augmented with Gray-coded position bits before
                 XNOR. Wider feature space encodes sequence position inside the
-                similarity kernel. scale initialised to -4.0.
+                similarity kernel.
       'log'   — log-distance symmetric matrix added to the attention map before
-                sigmoid scaling; nearby positions get higher bias. scale -4.0.
+                sigmoid scaling; nearby positions get higher bias.
 
     Assertion: attn_pe must be 'none', 'gray', or 'log'.
     Input/output: (T, B, L, D).
@@ -247,7 +243,7 @@ class SSA_XNOR(nn.Module):
             q = generate_gray_code_matrix(q, self.gray_bits)  # (T,B,H,L, head_dim+bits)
             k = generate_gray_code_matrix(k, self.gray_bits)
 
-        # XNOR similarity: sum(1 - (q_i - k_j)^2) ≡ D_new - Σq - Σk + 2·q·kᵀ
+
         D_new = q.size(-1)
         qk = torch.matmul(q, k.transpose(-1, -2))              # (T,B,H,L,L)
         sum_q = q.sum(-1, keepdim=True)                         # (T,B,H,L,1)
@@ -281,7 +277,6 @@ class Block(nn.Module):
                      XNOR variants.
         mlp_cls:     MLP class to use (default: MLP). Pass MLPCPG for CPG variant.
         mlp_kwargs:  Extra kwargs forwarded to mlp_cls (e.g. num_pe_neuron for MLPCPG).
-        **attn_kwargs: Extra kwargs forwarded to attn_cls (e.g. attn_pe, gray_bits).
     """
 
     def __init__(self, length, tau, common_thr, dim, d_ff, heads=8, qk_scale=0.125,
@@ -301,16 +296,9 @@ class Block(nn.Module):
         return x
 
 
-# ---------------------------------------------------------------------------
-# Spikingformer-style blocks  (pre-LIF attention + pre-LIF MLP)
-# Reference: SeqSNN-RPE/SeqSNN/network/snn/spikingformer*.py
-# ---------------------------------------------------------------------------
 
 class SpikingSSA(nn.Module):
     """Spikingformer spiking self-attention. Input/output: (T, B, L, D).
-
-    Key difference from SSA: a pre-LIF gate is applied to the INPUT x before
-    QKV projection. The output has no final LIF (next block's pre-LIF handles it).
     """
 
     def __init__(self, length, tau, common_thr, dim, heads=8, qk_scale=0.125):
@@ -368,8 +356,8 @@ class SpikingSSA_XNOR(nn.Module):
     """Spikingformer XNOR spiking self-attention. Input/output: (T, B, L, D).
 
     Combines SpikingSSA's pre-LIF gate with SSA_XNOR's similarity computation.
-    attn_pe: 'gray' — Gray-code Q/K augmentation (scale init -4)
-             'log'  — log-distance symmetric bias (scale init -4)
+    attn_pe: 'gray' — Gray-code Q/K augmentation 
+             'log'  — log-distance symmetric bias
     """
 
     def __init__(self, length, tau, common_thr, dim, heads=8, qk_scale=0.125,
@@ -443,9 +431,6 @@ class SpikingSSA_XNOR(nn.Module):
 
 class SpikingMLP(nn.Module):
     """Spikingformer MLP with pre-LIF gates. Input/output: (T, B, L, D).
-
-    Pre-LIF is applied BEFORE each linear layer (not after BN), so the output
-    is the raw BN output — next block's pre_lif gates it.
     """
 
     def __init__(self, length, tau, common_thr, in_features, hidden_features,
@@ -488,7 +473,6 @@ class SpikingBlock(nn.Module):
 
     Args:
         attn_cls:    SpikingSSA (default) or SpikingSSA_XNOR for XNOR variants.
-        **attn_kwargs: Forwarded to attn_cls (e.g. attn_pe, gray_bits).
     """
 
     def __init__(self, length, tau, common_thr, dim, d_ff, heads=8, qk_scale=0.125,
@@ -506,18 +490,9 @@ class SpikingBlock(nn.Module):
         return x
 
 
-# ---------------------------------------------------------------------------
-# TS-LIF blocks  (two-compartment TSLIFNode replacing spikingjelly LIFNode)
-# Reference: arXiv:2503.05108 — TS-LIF/SeqSNN/module/spike_attention.py
-# ---------------------------------------------------------------------------
 
 class TSSSA(nn.Module):
     """TS-LIF Spiking Self-Attention. Input/output: (T, B, L, D).
-
-    Identical structure to SSA but every LIFNode is replaced by TSLIFNode.
-    TSLIFNode processes the full (T, B, L, D) tensor in one call with
-    two-compartment dual-spike dynamics and learnable decay/coupling.
-    attn_tslif uses v_threshold=0.5 (same semantics as SSA's attn_lif).
     """
 
     def __init__(self, length, tau, common_thr, dim, heads=8, qk_scale=0.125):

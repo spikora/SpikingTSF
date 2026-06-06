@@ -4,30 +4,18 @@ Reference:
     arXiv:2503.05108 (TS-LIF paper)
     TS-LIF/TS-LIF/SeqSNN/network/snn/ispikformer.py (iSpikformer class)
 
-Adaptation of iSpikformer (models/iSpikformer.py) that replaces every
-spikingjelly LIFNode with TSLIFNode — the two-compartment dual-spike neuron
-introduced by the TS-LIF paper. Uses TSBlock (TSSSA + TSMLP) from
-models/layers/spike_attention.py, and TSLIFNode inside DataEmbeddingInverted.
 
-All other architectural choices (inverted iTransformer paradigm, channel tokens,
-encoder, decoder via h[-1]) follow our iSpikformer adaptation of SeqSNN.
-
-Key differences from iSpikformer:
-  - DataEmbeddingInverted.lif → TSLIFNode()   (was step_mode='m' LIFNode)
-  - transformer Block         → TSBlock        (TSSSA + TSMLP with TSLIFNode)
-  - functional.reset_net(self) called at start of forward()
-
-Architecture (same as iSpikformer):
+Architecture:
     (B, L, D)
-      → RevIN norm
-      → SpikeEncoder             (T, B, D, L)
-      → transpose                (T, B, L, D)
-      → DataEmbeddingInverted    (T, B, D, d_model)   Linear(L→d_model)+BN+TSLIFNode
-      → TSBlock × blocks         (T, B, D, d_model)   TSSSA+TSMLP over D channel tokens
-      → last T step              (B, D, d_model)
-      → Linear(d_model→pred_len) (B, D, pred_len)
-      → transpose                (B, pred_len, D)
-      → denorm
+      -> RevIN norm
+      -> SpikeEncoder             (T, B, D, L)
+      -> transpose                (T, B, L, D)
+      -> DataEmbeddingInverted    (T, B, D, d_model)   Linear(L->d_model)+BN+TSLIFNode
+      -> TSBlock x blocks         (T, B, D, d_model)   TSSSA+TSMLP over D channel tokens
+      -> last T step              (B, D, d_model)
+      -> Linear(d_model->pred_len) (B, D, pred_len)
+      -> transpose                (B, pred_len, D)
+      -> denorm
 """
 
 import torch
@@ -41,9 +29,6 @@ from models.layers.spike_encoder import ConvEncoder, DeltaEncoder
 
 class TSDataEmbeddingInverted(nn.Module):
     """Inverted channel-wise temporal embedding with TSLIFNode.
-
-    Same as DataEmbeddingInverted in iSpikformer but uses TSLIFNode instead
-    of spikingjelly LIFNode for the post-BN spike gate.
 
     Input : (T, B, L, D)
     Output: (T, B, D, d_model)
@@ -76,13 +61,13 @@ class TSFormer(nn.Module):
         D:            Number of input/output channels (enc_in).
         pred_len:     Prediction horizon.
         tau:          LIF time constant (used by encoder only).
-        d_model:      Per-channel embedding dimension (mapped from ``alpha`` in args).
-        d_ff:         Feedforward hidden size in TSMLP (default: d_model × 4).
+        d_model:      Per-channel embedding dimension (mapped from alpha in args).
+        d_ff:         Feedforward hidden size in TSMLP (default: d_model x 4).
         heads:        Attention heads in TSSSA (must divide d_model).
         common_thr:   Threshold passed through to TSBlock signatures (not used by
                       TSLIFNode which has its own v_threshold).
         qk_scale:     Q·K scaling factor in TSSSA (default 0.125).
-        encoder_type: Spike encoder — ``'conv'`` or ``'delta'``.
+        encoder_type: Spike encoder — 'conv' or 'delta'.
         normalize:    RevIN-style instance normalization (default True).
     """
 

@@ -12,7 +12,7 @@ checkpoints: exp/run_ETT/
 # Forecasting window
 seq_len: 96
 label_len: 0
-# pred_len is swept in the shell script
+
 
 # SNN architecture
 T: 4

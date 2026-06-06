@@ -12,10 +12,9 @@ checkpoints: exp/run_ETT/
 # Forecasting window
 seq_len: 96
 label_len: 0
-# pred_len is swept in the shell script
 
-# SpikF architecture
-# Capacity knobs: patch_num × patch_dim (patch embedding) + hidden_dim (decoder)
+
+# SNN architecture
 # patch_num must divide seq_len (96): valid choices {4,8,12,16,24,48}
 T: 16
 tau: 2.4837783249744376

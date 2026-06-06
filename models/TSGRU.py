@@ -4,31 +4,20 @@ Reference:
     arXiv:2503.05108 (TS-LIF paper)
     TS-LIF/TS-LIF/SeqSNN/network/snn/spikegru.py (ITSSNNGRU2D class)
 
-Adaptation of SpikeGRU (models/SpikGRU.py) that replaces every spikingjelly
-LIFNode with TSLIFNode — the two-compartment dual-spike neuron introduced by
-the TS-LIF paper. All other architectural choices (encoder, PE, GRU gating,
-decoder) follow our existing SpikeGRU adaptation of SeqSNN.
 
-Key differences from SpikeGRU:
-  - init_lif        → TSLIFNode()   (was step_mode='m' LIFNode)
-  - SpikeGRUCell.lif → TSLIFNode()  (was step_mode='s' LIFNode)
-  - out_lif         → TSLIFNode()   (was step_mode='m' LIFNode)
-  - functional.reset_net(self) called at the start of forward() to reset
-    TSLIFNode membrane state (v1, v2) between batches.
-
-Architecture (same pipeline as SpikeGRU):
+Architecture:
     (B, L, D)
-      → RevIN norm
-      → SpikeEncoder           (T, B, D, L)
-      → transpose              (T, B, L, D)
-      → [optional PE]
-      → Linear(D→hidden) + TSLIFNode   (T, B, L, hidden)
-      → TSGRUCell × blocks     (T, B, L, hidden)   sequential T-step loop
+      -> RevIN norm
+      -> SpikeEncoder           (T, B, D, L)
+      -> transpose              (T, B, L, D)
+      -> [optional PE]
+      -> Linear(D->hidden) + TSLIFNode   (T, B, L, hidden)
+      -> TSGRUCell x blocks     (T, B, L, hidden)   sequential T-step loop
           GRU gates (r,z,n) via ATan; hidden TSLIFNode-quantized
-      → Linear(hidden→D) + BN + TSLIFNode  (T, B, L, D)
-      → Linear(L→pred_len)     (T, B, D, pred_len)
-      → permute → mean T       (B, pred_len, D)
-      → denorm
+      -> Linear(hidden->D) + BN + TSLIFNode  (T, B, L, D)
+      -> Linear(L->pred_len)     (T, B, D, pred_len)
+      -> permute -> mean T       (B, pred_len, D)
+      -> denorm
 """
 
 import torch
@@ -42,15 +31,6 @@ from models.layers.positional_encoding import PositionEmbedding
 
 class TSGRUCell(nn.Module):
     """GRU spiking cell with TSLIFNode for hidden-state quantisation.
-
-    Mirrors SpikeGRUCell exactly but replaces the single-step LIFNode with
-    TSLIFNode so that the hidden state carries two-compartment temporal memory.
-    TSLIFNode state (v1, v2) accumulates across T steps in the sequential loop,
-    giving the cell richer temporal dynamics than a memoryless surrogate.
-
-    Args:
-        input_size:  Input feature dimension.
-        hidden_size: Hidden state dimension.
     """
 
     def __init__(self, input_size: int, hidden_size: int):
@@ -98,12 +78,12 @@ class TSGRU(nn.Module):
         pred_len:       Prediction horizon.
         tau:            LIF membrane time constant (used by encoder only).
         hidden_dim:     Recurrent cell and decoder hidden size
-                        (mapped from ``alpha`` in args).
-        encoder_type:   Spike encoder — ``'conv'`` or ``'delta'``.
-        pe_type:        Positional encoding — ``'none'``, ``'learn'``,
-                        ``'static'``, ``'conv'``, ``'neuron'``, ``'random'``.
-        pe_mode:        How PE is combined — ``'add'`` or ``'concat'``.
-        num_pe_neuron:  PE neurons for ``neuron``/``random`` PE (default 10).
+                        (mapped from alpha in args).
+        encoder_type:   Spike encoder — 'conv' or 'delta'.
+        pe_type:        Positional encoding — 'none', 'learn',
+                        'static', 'conv', 'neuron', 'random'.
+        pe_mode:        How PE is combined — 'add' or 'concat'.
+        num_pe_neuron:  PE neurons for 'neuron'/'random' PE (default 10).
         neuron_pe_scale: Frequency scale for neuron PE (default 1000.0).
         normalize:      RevIN-style instance normalization (default True).
     """
