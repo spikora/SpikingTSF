@@ -3,7 +3,7 @@
 cd "$(dirname "$0")/../.." || exit 1
 mkdir -p Output/TSTCN
 
-export CUDA_VISIBLE_DEVICES=1
+export CUDA_VISIBLE_DEVICES=2
 
 for pred_len in 96 192 336 720
 do

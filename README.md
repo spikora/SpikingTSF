@@ -43,6 +43,8 @@ SpikingTSF supports both SNN models and ANN baselines, enabling honest compariso
 
 ## News
 
+🚩 **(2026.06)** [[SpikF-GO]](https://github.com/jafarbakhshaliyev/SpikF-GO) (accepted to ECML PKDD 2026) introduces Spiking Fourier Graph Operators for multivariate time-series forecasting, with an optional spike-domain CPG positional encoding. 
+
 🚩 **(2026.04)** SpikingTSF is released as the first unified SNN time-series forecasting library. Implementations span eleven SNN architectures and two ANN baselines, all evaluated under a single consistent protocol on ETTh1 and ETTh2.
 
 🚩 **(2026.05)** [[SpikF]](https://raw.githubusercontent.com/mlresearch/v267/main/assets/wu25m/wu25m.pdf) (ICML 2025) introduces a spiking frequency-domain transformer for long-term forecasting.
@@ -79,6 +81,7 @@ Full details — source papers, source repositories, file paths, and verificatio
 
 | Model | Type | Spike? | Source | Status |
 |-------|------|:------:|--------|--------|
+| **SpikF-GO** | Spiking Fourier Graph Operator (freq. domain, optional CPG-PE) | ✅ | Bakhshaliyev & Landwehr, *accepted to ECML PKDD 2026* — [jafarbakhshaliyev/SpikF-GO](https://github.com/jafarbakhshaliyev/SpikF-GO) | Runnable |
 | **SpikF** | Transformer (freq. domain) | ✅ | [Wu et al., ICML 2025](https://raw.githubusercontent.com/mlresearch/v267/main/assets/wu25m/wu25m.pdf) | Runnable |
 | **Spikformer** | Transformer (spike-driven SA) | ✅ | [SeqSNN, NeurIPS 2025](https://arxiv.org/abs/2501.16745) | Runnable |
 | **Spikingformer** | Transformer (pre-LIF) | ✅ | [SeqSNN, NeurIPS 2025](https://arxiv.org/abs/2501.16745) | Runnable, ETTh1+ETTh2 verified |
@@ -185,6 +188,7 @@ SpikingTSF/
 │   ├── exp_basic.py                 # Base experiment class
 │   └── exp_ETT.py                   # ETT forecasting logic (train / val / test)
 ├── models/                          # All model implementations
+│   ├── SpikF_GO.py                  # SpikF-GO (ours, accepted ECML PKDD 2026)
 │   ├── SpikF.py                     # SpikF (ICML 2025)
 │   ├── Spikformer.py                # Spikformer
 │   ├── Spikingformer.py             # Spikingformer
@@ -248,13 +252,15 @@ Please read [CONTRIBUTING.md](CONTRIBUTING.md) before submitting a pull request.
 
 If you use SpikingTSF as a benchmark framework, codebase, or experimental platform, please cite our SpikF-GO / SpikingTSF paper. If you use a specific model implementation, please also cite the corresponding original paper.
 
-**SpikF-GO (SpikingTSF paper):**
+**SpikF-GO (SpikingTSF paper) — accepted to ECML PKDD 2026:**
 ```bibtex
-@misc{bakhshaliyev2026spikfgo,
-  title  = {{SpikF-GO}: Spiking Fourier Graph Operators for Multivariate Time Series Forecasting},
-  author = {Bakhshaliyev, Jafar},
-  year   = {2026},
-  note   = {TODO: update with venue, proceedings, and DOI after publication}
+@inproceedings{bakhshaliyev2026spikfgo,
+  title     = {{SpikF-GO}: Spiking Fourier Graph Operators for Multivariate Time Series Forecasting},
+  author    = {Bakhshaliyev, Jafar and Landwehr, Niels},
+  booktitle = {Proceedings of the European Conference on Machine Learning and Principles
+               and Practice of Knowledge Discovery in Databases (ECML PKDD)},
+  year      = {2026},
+  note      = {To appear; full proceedings citation and DOI will be added once available}
 }
 ```
 
@@ -278,6 +284,7 @@ For model-specific citations, see [docs/citation_policy.md](docs/citation_policy
 SpikingTSF builds upon the following excellent open-source projects:
 
 - **SNN backend:** [SpikingJelly](https://github.com/fangwei123456/spikingjelly)
+- **SpikF-GO:** [jafarbakhshaliyev/SpikF-GO](https://github.com/jafarbakhshaliyev/SpikF-GO) (Bakhshaliyev & Landwehr, accepted to ECML PKDD 2026 — our own paper)
 - **SpikF family:** [WWJ-creator/SpikF](https://github.com/WWJ-creator/SpikF)
 - **SeqSNN family:** [microsoft/SeqSNN](https://github.com/microsoft/SeqSNN)
 - **TS-LIF family:** [kkking-kk/TS-LIF](https://github.com/kkking-kk/TS-LIF)

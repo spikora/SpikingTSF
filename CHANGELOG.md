@@ -10,6 +10,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 
 ### Added
 
+- `SpikF_GO` model (`models/SpikF_GO.py`) — Spiking Fourier Graph Operators (Bakhshaliyev & Landwehr, accepted to ECML PKDD 2026), with an optional spike-domain CPG positional encoding toggled via `--pe_type cpg`
 - Documentation files: `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, `SUPPORT.md`, `GOVERNANCE.md`, `ROADMAP.md`, `ACKNOWLEDGEMENTS.md`, `NOTICE`, `PROTOCOL.md`, `DATASETS.md`, `REPRODUCIBILITY.md`, and `MODEL_ZOO.md`
 - `CITATION.cff` for software citation
 - GitHub issue templates and pull request template

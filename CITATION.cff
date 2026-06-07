@@ -27,10 +27,14 @@ keywords:
   - deep learning
   - neuromorphic computing
 preferred-citation:
-  type: article
+  type: conference-paper
   title: "SpikF-GO: Spiking Fourier Graph Operators for Multivariate Time Series Forecasting"
   authors:
     - family-names: Bakhshaliyev
       given-names: Jafar
+    - family-names: Landwehr
+      given-names: Niels
   year: 2026
-  notes: "TODO: update with venue, proceedings information, and DOI after publication"
+  conference:
+    name: "European Conference on Machine Learning and Principles and Practice of Knowledge Discovery in Databases (ECML PKDD)"
+  notes: "Accepted to ECML PKDD 2026 (to appear); full proceedings citation and DOI will be added once available"
