@@ -8,7 +8,8 @@ All main PE modules accept and return (T, B, L, D) tensors.
 Additional utilities for XNOR attention variants:
   generate_gray_code_matrix  — appends Gray-code position bits to Q/K tensors
   create_symmetric_matrix    — builds log-distance symmetric bias for XNOR_Log attention
-  CPGLinear                  — CPG-modulated input projection used by SpikformerV CPG variant
+  CPGLinear                  — CPG-modulated input projection used by Spikformer CPG variant
+  CPGSpikePE                 — spike-form CPG positional encoding 
 """
 
 import math
@@ -270,3 +271,36 @@ class CPGLinear(nn.Module):
         # x: (B, TL, D)
         cpg_bias = self.cpg_linear(self.cpg[:x.size(1)])           # (TL, output_size)
         return self.inp_linear(self.dropout(x)) + cpg_bias         # (B, TL, output_size)
+
+
+class CPGSpikePE(nn.Module):
+    """Spike-form CPG positional encoding.
+
+    Generates 2*num_pairs binary spike channels over the flattened
+    (T, position) index t in [0, T*M), with log-spaced rhythms and interleaved cos/sin pairs.
+    """
+
+    def __init__(self, num_pairs: int = 20, tau: float = 10000.0, eta: float = 1.0,
+                 vthres: float = 0.8):
+        super().__init__()
+        self.num_pairs = int(num_pairs)
+        self.tau = float(tau)
+        self.eta = float(eta)
+        self.vthres = float(vthres)
+
+    def forward(self, T: int, B: int, M: int, device=None) -> torch.Tensor:
+        if device is None:
+            device = torch.device('cpu')
+
+        t = torch.arange(T * M, device=device, dtype=torch.float32)        # (T*M,)
+        i = torch.arange(self.num_pairs, device=device, dtype=torch.float32)
+        denom = self.tau ** (i / max(1, self.num_pairs))                   # (num_pairs,)
+
+        arg = self.eta * t[:, None] / denom[None, :]                       # (T*M, num_pairs)
+        cos_spk = (torch.cos(arg) - self.vthres > 0).float()
+        sin_spk = (torch.sin(arg) - self.vthres > 0).float()
+
+        pe = torch.stack([cos_spk, sin_spk], dim=-1).flatten(1)    # (T*M, 2*num_pairs), interleaved
+        pe = pe.view(T, M, 2 * self.num_pairs).unsqueeze(1)        # (T, 1, M, 2*num_pairs)
+        pe = pe.expand(-1, B, -1, -1).contiguous()                 # (T, B, M, 2*num_pairs)
+        return pe

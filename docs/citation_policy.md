@@ -6,14 +6,16 @@ SpikingTSF is an open-source benchmark library for spiking neural network based 
 
 ## If You Use This Library
 
-If you use any substantial part of SpikingTSF in academic work — including the codebase, training loop, model interface, data loading pipeline, evaluation protocol, scripts, or benchmark structure — please cite the related SpikF-GO paper:
+If you use any substantial part of SpikingTSF in academic work — including the codebase, training loop, model interface, data loading pipeline, evaluation protocol, scripts, or benchmark structure — please cite the related SpikF-GO paper (accepted to ECML PKDD 2026):
 
 ```bibtex
-@misc{bakhshaliyev2026spikfgo,
-  title  = {{SpikF-GO}: Spiking Fourier Graph Operators for Multivariate Time Series Forecasting},
-  author = {Bakhshaliyev, Jafar},
-  year   = {2026},
-  note   = {TODO: update with venue, proceedings information, and DOI after publication}
+@inproceedings{bakhshaliyev2026spikfgo,
+  title     = {{SpikF-GO}: Spiking Fourier Graph Operators for Multivariate Time Series Forecasting},
+  author    = {Bakhshaliyev, Jafar and Landwehr, Niels},
+  booktitle = {Proceedings of the European Conference on Machine Learning and Principles
+               and Practice of Knowledge Discovery in Databases (ECML PKDD)},
+  year      = {2026},
+  note      = {To appear; full proceedings citation and DOI will be added once available}
 }
 ```
 
@@ -37,6 +39,7 @@ SpikingTSF includes implementations or adaptations of several existing SNN and A
 
 | Model(s) | Paper to Cite |
 |----------|--------------|
+| SpikF-GO | Bakhshaliyev & Landwehr, accepted to ECML PKDD 2026 (see above) |
 | SpikF | Wu et al., ICML 2025 |
 | Spikformer, Spikingformer, QKFormer | SeqSNN, NeurIPS 2025 (spotlight) |
 | iSpikformer, SpikeRNN, SpikTCN, SpikGRU | SeqSNN, ICML 2024 |

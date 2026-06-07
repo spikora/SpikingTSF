@@ -13,6 +13,9 @@ The primary SNN simulation framework used throughout this library for LIF neuron
 
 ## SNN Forecasting Models
 
+**SpikF-GO** — [jafarbakhshaliyev/SpikF-GO](https://github.com/jafarbakhshaliyev/SpikF-GO)
+Source of the SpikF-GO model (Spiking Fourier Graph Operators, Bakhshaliyev & Landwehr, accepted to ECML PKDD 2026). The `models/SpikF_GO.py` implementation, including its optional spike-domain CPG positional encoding variant, is adapted from this repository.
+
 **SpikF** — [WWJ-creator/SpikF](https://github.com/WWJ-creator/SpikF)
 Source of the SpikF model (Spiking Frequency-Domain Transformer, ICML 2025). The `models/SpikF.py` implementation is adapted from this repository.
 

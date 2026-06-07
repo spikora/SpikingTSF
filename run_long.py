@@ -26,7 +26,7 @@ parser.add_argument('--model', type=str, default='SpikF',
                         'iSpikformer', 'SpikeRNN', 'SpikTCN', 'SpikGRU',
                         'Spikformer', 'Spikingformer', 'QKFormer',
                         # Clock-driven SNN model
-                        'SpikF',
+                        'SpikF', 'SpikF_GO',
                         # ANN baselines
                         'DLinear', 'ITransformer',
                     ],
@@ -71,6 +71,12 @@ parser.add_argument('--patch_dim', type=int, default=32,
                     help='patch embedding dim (SpikF)')
 parser.add_argument('--hidden_dim', type=int, default=720,
                     help='dense/decoder hidden size (SpikF)')
+parser.add_argument('--proj_dim', type=int, default=32,
+                    help='decoder time-projection dim (SpikF-GO)')
+parser.add_argument('--normalize', action=argparse.BooleanOptionalAction, default=True,
+                    help='per-instance mean/std normalization (SpikF-GO)')
+parser.add_argument('--affine', action=argparse.BooleanOptionalAction, default=True,
+                    help='complex affine + gate stage inside the spectral MLP (SpikF-GO)')
 
 # Transformer / attention hyperparameters 
 parser.add_argument('--n_heads', type=int, default=8,
@@ -94,8 +100,10 @@ parser.add_argument('--encoder_type', type=str, default='conv',
 
 # Positional encoding
 parser.add_argument('--pe_type', type=str, default='none',
-                    choices=['none', 'learn', 'static', 'conv', 'neuron', 'random'],
-                    help='positional encoding type (SeqSNN-family models)')
+                    choices=['none', 'learn', 'static', 'conv', 'neuron', 'random', 'cpg'],
+                    help='positional encoding type (SeqSNN-family models); '
+                         "'cpg' enables the spike-form CPG positional encoding "
+                         '(SpikF-GO w/ CPG)')
 parser.add_argument('--pe_mode', type=str, default='add',
                     choices=['add', 'concat'],
                     help='how PE is combined with features (add or concat)')

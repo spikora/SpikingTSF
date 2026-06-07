@@ -10,6 +10,7 @@ import warnings
 
 # SNN models (spikingjelly clock_driven backend)
 from models.SpikF import SpikF
+from models.SpikF_GO import SpikF_GO
 from models.iSpikformer import iSpikformer
 from models.SpikeRNN import SpikeRNN
 from models.SpikTCN import SpikeTCN
@@ -59,7 +60,7 @@ _NEW_STYLE_MODELS = {
 _ANN_MODELS = {'DLinear', 'ITransformer'}
 
 # clock_driven neurons (reset via cd_functional only)
-_CD_MODELS = {'SpikF', 'SpikeRNN', 'SpikTCN', 'SpikGRU'}
+_CD_MODELS = {'SpikF', 'SpikF_GO', 'SpikeRNN', 'SpikTCN', 'SpikGRU'}
 
 # activation_based neurons (reset via ab_functional only);
 # these models also call reset_net(self) inside their own forward(),
@@ -277,6 +278,16 @@ class Exp_ETT(Exp_Basic):
                 common_thr=self.args.common_thr,
                 qk_scale=self.args.qk_scale,
                 encoder_type=self.args.encoder_type,
+            )
+        elif name == 'SpikF_GO':
+            model = SpikF_GO(
+                self.args,
+                pre_length=self.args.pred_len,
+                embed_size=alpha_dim,
+                feature_size=self.input_dim,
+                seq_length=self.args.seq_len,
+                hidden_size=self.args.hidden_dim,
+                pe_type='cpg' if self.args.pe_type == 'cpg' else 'none',
             )
         else:
             model = SpikF(

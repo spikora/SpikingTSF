@@ -3,7 +3,7 @@
 cd "$(dirname "$0")/../.." || exit 1
 mkdir -p Output/SpikTCN
 
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=3
 
 for pred_len in 336 720
 do
